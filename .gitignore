@@ -1,0 +1,28 @@
+# Secrets — never commit real config; see appsettings.example.json for the template
+backend/src/StoneStock.Api/appsettings.json
+
+# .NET build output
+**/bin/
+**/obj/
+backend/**/logs/
+
+# Visual Studio
+.vs/
+*.user
+*.suo
+
+# Node / frontend
+frontend/node_modules/
+frontend/dist/
+frontend/dist-ssr/
+*.local
+
+# Logs
+*.log
+npm-debug.log*
+
+# Editor
+.vscode/*
+!.vscode/extensions.json
+.idea
+.DS_Store
