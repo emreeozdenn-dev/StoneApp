@@ -2,6 +2,7 @@ import { Navigate, Route, Routes } from 'react-router-dom'
 import { AppLayout } from './components/layout/AppLayout'
 import { ProtectedRoute } from './auth/ProtectedRoute'
 import { LoginPage } from './pages/Login/LoginPage'
+import { ForgotPasswordPage } from './pages/Login/ForgotPasswordPage'
 import { SetupPage } from './pages/Setup/SetupPage'
 import { DashboardPage } from './pages/Dashboard/DashboardPage'
 import { UsersPage } from './pages/Users/UsersPage'
@@ -20,6 +21,7 @@ function App() {
   return (
     <Routes>
       <Route path="/giris" element={<LoginPage />} />
+      <Route path="/sifremi-unuttum" element={<ForgotPasswordPage />} />
       <Route path="/kurulum" element={<SetupPage />} />
 
       <Route element={<ProtectedRoute />}>

@@ -8,3 +8,5 @@ public sealed record SetupRequest(
     string Username,
     string Email,
     string Password);
+
+public sealed record ForgotPasswordRequest(string Email);

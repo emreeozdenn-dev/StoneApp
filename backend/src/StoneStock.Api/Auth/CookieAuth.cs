@@ -14,7 +14,7 @@ public static class CookieAuth
         {
             HttpOnly = true,
             Secure = true,
-            SameSite = SameSiteMode.None,
+            SameSite = SameSiteMode.Lax,
             Path = "/",
             Expires = DateTimeOffset.UtcNow.AddSeconds(tokens.ExpiresIn),
         };
@@ -24,7 +24,7 @@ public static class CookieAuth
         {
             HttpOnly = true,
             Secure = true,
-            SameSite = SameSiteMode.None,
+            SameSite = SameSiteMode.Lax,
             Path = "/",
             Expires = DateTimeOffset.UtcNow.AddDays(30),
         };

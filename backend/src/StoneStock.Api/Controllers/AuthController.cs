@@ -1,11 +1,16 @@
+using System.Security.Cryptography;
 using Microsoft.AspNetCore.Authorization;
+using Microsoft.AspNetCore.DataProtection;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Logging;
 using StoneStock.Api.Auth;
 using StoneStock.Application.Auth;
+using StoneStock.Application.Notifications;
 using StoneStock.Domain.Entities;
 using StoneStock.Domain.Enums;
 using StoneStock.Domain.Security;
+using StoneStock.Infrastructure.Notifications;
 using StoneStock.Infrastructure.Persistence;
 
 namespace StoneStock.Api.Controllers;
@@ -14,15 +19,29 @@ namespace StoneStock.Api.Controllers;
 [Route("api/auth")]
 public sealed class AuthController : ControllerBase
 {
+    private const string TempPasswordChars = "ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnpqrstuvwxyz23456789";
+
     private readonly AppDbContext _db;
     private readonly ISupabaseAuthClient _authClient;
     private readonly ISupabaseAdminClient _adminClient;
+    private readonly IDataProtectionProvider _dataProtectionProvider;
+    private readonly IEmailSender _emailSender;
+    private readonly ILogger<AuthController> _logger;
 
-    public AuthController(AppDbContext db, ISupabaseAuthClient authClient, ISupabaseAdminClient adminClient)
+    public AuthController(
+        AppDbContext db,
+        ISupabaseAuthClient authClient,
+        ISupabaseAdminClient adminClient,
+        IDataProtectionProvider dataProtectionProvider,
+        IEmailSender emailSender,
+        ILogger<AuthController> logger)
     {
         _db = db;
         _authClient = authClient;
         _adminClient = adminClient;
+        _dataProtectionProvider = dataProtectionProvider;
+        _emailSender = emailSender;
+        _logger = logger;
     }
 
     [HttpGet("setup-required")]
@@ -104,6 +123,91 @@ public sealed class AuthController : ControllerBase
         await _db.SaveChangesAsync(ct);
 
         return Ok(new { message = "Giriş başarılı." });
+    }
+
+    [HttpPost("forgot-password")]
+    [AllowAnonymous]
+    public async Task<IActionResult> ForgotPassword([FromBody] ForgotPasswordRequest request, CancellationToken ct)
+    {
+        var email = (request.Email ?? string.Empty).Trim().ToLowerInvariant();
+        var genericResult = Ok(new { message = "Bu e-posta adresi sistemde kayıtlıysa, yeni şifreniz e-posta ile gönderildi." });
+
+        if (email.Length == 0)
+        {
+            return genericResult;
+        }
+
+        var user = await _db.Users.FirstOrDefaultAsync(u => u.Email.ToLower() == email, ct);
+        if (user is null || user.Status != UserStatus.Aktif)
+        {
+            // Kullanıcı numarası sızdırmamak için hem "yok" hem "pasif" durumunda aynı genel mesaj döner.
+            return genericResult;
+        }
+
+        var settings = await _db.SystemSettings.FirstOrDefaultAsync(ct);
+        if (settings is null || string.IsNullOrWhiteSpace(settings.SmtpHost) || settings.SmtpPort is null ||
+            string.IsNullOrWhiteSpace(settings.SmtpSenderEmail))
+        {
+            _logger.LogWarning("Şifre sıfırlama istendi ama SMTP ayarları yapılandırılmamış (kullanıcı: {Username})", user.Username);
+            return genericResult;
+        }
+
+        var newPassword = GenerateTempPassword();
+        try
+        {
+            await _adminClient.ResetPasswordAsync(user.AuthUserId, newPassword, ct);
+        }
+        catch (InvalidOperationException ex)
+        {
+            _logger.LogError(ex, "Şifre sıfırlama sırasında Supabase hatası (kullanıcı: {Username})", user.Username);
+            return genericResult;
+        }
+
+        string? smtpPassword = null;
+        if (!string.IsNullOrEmpty(settings.SmtpPasswordEncrypted))
+        {
+            try
+            {
+                var protector = _dataProtectionProvider.CreateProtector(NotificationDispatcher.SmtpProtectorName);
+                smtpPassword = protector.Unprotect(settings.SmtpPasswordEncrypted);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "SMTP şifresi çözülemedi, şifre sıfırlama e-postası gönderilemedi (kullanıcı: {Username})", user.Username);
+                return genericResult;
+            }
+        }
+
+        var options = new SmtpSendOptions(
+            settings.SmtpHost!, settings.SmtpPort!.Value, settings.SmtpUsername, smtpPassword,
+            settings.SmtpUseSsl, settings.SmtpSenderEmail!, settings.SmtpSenderName ?? settings.SmtpSenderEmail!);
+
+        var (success, error) = await _emailSender.SendAsync(
+            options, user.Email, "StoneStock - Yeni Şifreniz",
+            $"<p>Merhaba {user.FirstName},</p>" +
+            $"<p>Şifre sıfırlama talebiniz üzerine yeni şifreniz oluşturuldu:</p>" +
+            $"<p style=\"font-size:18px;font-weight:bold;letter-spacing:1px;\">{System.Net.WebUtility.HtmlEncode(newPassword)}</p>" +
+            $"<p>Giriş yaptıktan sonra bu şifreyi değiştirmenizi öneririz.</p>",
+            ct);
+
+        if (!success)
+        {
+            _logger.LogError("Şifre sıfırlama e-postası gönderilemedi (kullanıcı: {Username}): {Error}", user.Username, error);
+        }
+
+        return genericResult;
+    }
+
+    private static string GenerateTempPassword(int length = 10)
+    {
+        var bytes = RandomNumberGenerator.GetBytes(length);
+        var chars = new char[length];
+        for (var i = 0; i < length; i++)
+        {
+            chars[i] = TempPasswordChars[bytes[i] % TempPasswordChars.Length];
+        }
+
+        return new string(chars);
     }
 
     [HttpPost("logout")]

@@ -1,10 +1,11 @@
 import { useEffect, useState } from 'react'
-import { Navigate, useNavigate, useSearchParams } from 'react-router-dom'
+import { Link as RouterLink, Navigate, useNavigate, useSearchParams } from 'react-router-dom'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import {
   Alert,
   Box,
   Button,
+  Link,
   Paper,
   Stack,
   TextField,
@@ -107,6 +108,9 @@ export function LoginPage() {
             <Button type="submit" variant="contained" size="large" disabled={submitting}>
               {submitting ? 'Giriş yapılıyor…' : 'Giriş Yap'}
             </Button>
+            <Link component={RouterLink} to="/sifremi-unuttum" variant="body2" sx={{ textAlign: 'center' }}>
+              Şifremi unuttum
+            </Link>
           </Stack>
         </Box>
       </Paper>

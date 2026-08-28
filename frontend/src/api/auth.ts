@@ -42,3 +42,8 @@ export async function setupAdmin(payload: SetupPayload) {
   const { data } = await apiClient.post('/auth/setup', payload)
   return data as { message: string }
 }
+
+export async function forgotPassword(email: string) {
+  const { data } = await apiClient.post('/auth/forgot-password', { email })
+  return data as { message: string }
+}
