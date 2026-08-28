@@ -33,6 +33,18 @@ builder.Services.AddControllers();
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen();
 
+var corsAllowedOrigins = builder.Configuration.GetSection("Cors:AllowedOrigins").Get<string[]>() ?? Array.Empty<string>();
+builder.Services.AddCors(options =>
+{
+    options.AddPolicy("Frontend", policy =>
+    {
+        if (corsAllowedOrigins.Length > 0)
+        {
+            policy.WithOrigins(corsAllowedOrigins).AllowAnyHeader().AllowAnyMethod().AllowCredentials();
+        }
+    });
+});
+
 var appSettingsPath = Path.Combine(builder.Environment.ContentRootPath, "appsettings.json");
 builder.Services.AddSingleton<IConnectionSettingsService>(sp =>
     new ConnectionSettingsService(appSettingsPath, sp.GetRequiredService<IConfiguration>()));
@@ -96,6 +108,8 @@ if (app.Environment.IsDevelopment())
 }
 
 app.UseSerilogRequestLogging();
+
+app.UseCors("Frontend");
 
 app.UseAuthentication();
 app.UseAuthorization();
