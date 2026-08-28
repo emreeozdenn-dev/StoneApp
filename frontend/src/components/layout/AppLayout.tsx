@@ -1,3 +1,4 @@
+import { useState } from 'react'
 import { Outlet, useNavigate } from 'react-router-dom'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import {
@@ -7,11 +8,13 @@ import {
   Button,
   Chip,
   Drawer,
+  IconButton,
   Stack,
   Toolbar,
   Typography,
 } from '@mui/material'
 import LogoutIcon from '@mui/icons-material/LogoutOutlined'
+import MenuIcon from '@mui/icons-material/MenuOutlined'
 import { logout } from '../../api/auth'
 import { fetchCompanyBranding } from '../../api/systemSettings'
 import { useCurrentUser } from '../../auth/useCurrentUser'
@@ -25,6 +28,7 @@ export function AppLayout() {
   const queryClient = useQueryClient()
   const brandingQuery = useQuery({ queryKey: ['company-branding'], queryFn: fetchCompanyBranding, enabled: !!user })
   const branding = brandingQuery.data
+  const [mobileOpen, setMobileOpen] = useState(false)
 
   const handleLogout = async () => {
     try {
@@ -40,38 +44,66 @@ export function AppLayout() {
     }
   }
 
+  const drawerContent = (
+    <>
+      <Box sx={{ px: 3, py: 2.5 }}>
+        <Typography variant="subtitle1" sx={{ fontWeight: 700, lineHeight: 1.3 }}>
+          Mermer Stok Yönetimi
+        </Typography>
+        {branding?.companyName && (
+          <Typography variant="subtitle1" sx={{ fontWeight: 700, lineHeight: 1.3 }}>
+            {branding.companyName}
+          </Typography>
+        )}
+      </Box>
+      {user && <Sidebar permissions={user.permissions} onNavigate={() => setMobileOpen(false)} />}
+    </>
+  )
+
   return (
     <Box sx={{ display: 'flex', minHeight: '100vh' }}>
-      <Drawer
-        variant="permanent"
-        sx={{
-          width: DRAWER_WIDTH,
-          flexShrink: 0,
-          '& .MuiDrawer-paper': { width: DRAWER_WIDTH, boxSizing: 'border-box', border: 'none', bgcolor: 'background.paper' },
-        }}
-      >
-        <Box sx={{ px: 3, py: 2.5 }}>
-          <Typography variant="subtitle1" sx={{ fontWeight: 700, lineHeight: 1.3 }}>
-            Mermer Stok Yönetimi
-          </Typography>
-          {branding?.companyName && (
-            <Typography variant="subtitle1" sx={{ fontWeight: 700, lineHeight: 1.3 }}>
-              {branding.companyName}
-            </Typography>
-          )}
-        </Box>
-        {user && <Sidebar permissions={user.permissions} />}
-      </Drawer>
+      <Box component="nav" sx={{ width: { md: DRAWER_WIDTH }, flexShrink: { md: 0 } }}>
+        <Drawer
+          variant="temporary"
+          open={mobileOpen}
+          onClose={() => setMobileOpen(false)}
+          ModalProps={{ keepMounted: true }}
+          sx={{
+            display: { xs: 'block', md: 'none' },
+            '& .MuiDrawer-paper': { width: DRAWER_WIDTH, boxSizing: 'border-box', bgcolor: 'background.paper' },
+          }}
+        >
+          {drawerContent}
+        </Drawer>
+        <Drawer
+          variant="permanent"
+          sx={{
+            display: { xs: 'none', md: 'block' },
+            '& .MuiDrawer-paper': { width: DRAWER_WIDTH, boxSizing: 'border-box', border: 'none', bgcolor: 'background.paper' },
+          }}
+          open
+        >
+          {drawerContent}
+        </Drawer>
+      </Box>
 
-      <Box sx={{ flexGrow: 1, display: 'flex', flexDirection: 'column' }}>
+      <Box sx={{ flexGrow: 1, minWidth: 0, display: 'flex', flexDirection: 'column' }}>
         <AppBar
           position="static"
           color="transparent"
           elevation={0}
           sx={{ borderBottom: 1, borderColor: 'divider', bgcolor: 'background.paper' }}
         >
-          <Toolbar sx={{ gap: 2, minHeight: 280, py: 3 }}>
-            <Box sx={{ flex: 1 }} />
+          <Toolbar sx={{ gap: 1, minHeight: { xs: 64, md: 280 }, py: { xs: 1, md: 3 } }}>
+            <IconButton
+              edge="start"
+              onClick={() => setMobileOpen(true)}
+              sx={{ display: { xs: 'inline-flex', md: 'none' } }}
+            >
+              <MenuIcon />
+            </IconButton>
+
+            <Box sx={{ flex: 1, display: { xs: 'none', md: 'block' } }} />
 
             {branding?.logoUrl && (
               <Box sx={{ flex: 1, display: 'flex', justifyContent: 'center' }}>
@@ -79,24 +111,31 @@ export function AppLayout() {
                   component="img"
                   src={branding.logoUrl}
                   alt="Firma logosu"
-                  sx={{ height: 256, width: 256, objectFit: 'contain', borderRadius: 1 }}
+                  sx={{ height: { xs: 44, md: 256 }, width: { xs: 44, md: 256 }, objectFit: 'contain', borderRadius: 1 }}
                 />
               </Box>
             )}
 
             <Box sx={{ flex: 1, display: 'flex', justifyContent: 'flex-end' }}>
               {user && (
-                <Stack direction="row" spacing={1.5} sx={{ alignItems: 'center' }}>
-                  <Chip label={user.role} size="small" color="primary" variant="outlined" />
+                <Stack direction="row" spacing={1} sx={{ alignItems: 'center' }}>
+                  <Chip label={user.role} size="small" color="primary" variant="outlined" sx={{ display: { xs: 'none', sm: 'inline-flex' } }} />
                   <Avatar sx={{ width: 32, height: 32, fontSize: 14 }}>
                     {user.firstName.charAt(0)}
                     {user.lastName.charAt(0)}
                   </Avatar>
-                  <Typography variant="body2">
+                  <Typography variant="body2" sx={{ display: { xs: 'none', sm: 'block' } }}>
                     {user.firstName} {user.lastName}
                   </Typography>
-                  <Button size="small" startIcon={<LogoutIcon />} onClick={handleLogout}>
-                    Çıkış Yap
+                  <Button
+                    size="small"
+                    startIcon={<LogoutIcon />}
+                    onClick={handleLogout}
+                    sx={{ minWidth: 0, '& .MuiButton-startIcon': { mr: { xs: 0, sm: 1 } } }}
+                  >
+                    <Box component="span" sx={{ display: { xs: 'none', sm: 'inline' } }}>
+                      Çıkış Yap
+                    </Box>
                   </Button>
                 </Stack>
               )}
@@ -104,7 +143,7 @@ export function AppLayout() {
           </Toolbar>
         </AppBar>
 
-        <Box sx={{ flexGrow: 1, minWidth: 0, p: 3 }}>
+        <Box sx={{ flexGrow: 1, minWidth: 0, p: { xs: 1.5, md: 3 } }}>
           <Outlet />
         </Box>
       </Box>

@@ -22,6 +22,7 @@ import { hasPermission } from '../../auth/useCurrentUser'
 
 interface SidebarProps {
   permissions: string[]
+  onNavigate?: () => void
 }
 
 const itemSx = {
@@ -34,22 +35,22 @@ const itemSx = {
   },
 }
 
-export function Sidebar({ permissions }: SidebarProps) {
+export function Sidebar({ permissions, onNavigate }: SidebarProps) {
   return (
     <List sx={{ py: 2 }} component="nav">
-      <NavItem to="/" icon={<DashboardIcon />} label="Dashboard" end />
-      <NavItem to="/qr-tara" icon={<QrCodeScannerIcon />} label="QR Kod Tara" />
+      <NavItem to="/" icon={<DashboardIcon />} label="Dashboard" end onNavigate={onNavigate} />
+      <NavItem to="/qr-tara" icon={<QrCodeScannerIcon />} label="QR Kod Tara" onNavigate={onNavigate} />
       {hasPermission(permissions, 'stones.view') && (
-        <NavItem to="/taslar" icon={<DiamondIcon />} label="Taşlar" />
+        <NavItem to="/taslar" icon={<DiamondIcon />} label="Taşlar" onNavigate={onNavigate} />
       )}
       {hasPermission(permissions, 'incomingstock.view') && (
-        <NavItem to="/gelen-stok" icon={<Inventory2Icon />} label="Gelen Stok" />
+        <NavItem to="/gelen-stok" icon={<Inventory2Icon />} label="Gelen Stok" onNavigate={onNavigate} />
       )}
       {hasPermission(permissions, 'plates.view') && (
-        <NavItem to="/plakalar" icon={<ViewModuleIcon />} label="Plakalar" />
+        <NavItem to="/plakalar" icon={<ViewModuleIcon />} label="Plakalar" onNavigate={onNavigate} />
       )}
       {hasPermission(permissions, 'notifications.view') && (
-        <NavItem to="/bildirim-gecmisi" icon={<NotificationsIcon />} label="Bildirim Geçmişi" />
+        <NavItem to="/bildirim-gecmisi" icon={<NotificationsIcon />} label="Bildirim Geçmişi" onNavigate={onNavigate} />
       )}
 
       {(hasPermission(permissions, 'users.manage') ||
@@ -67,19 +68,19 @@ export function Sidebar({ permissions }: SidebarProps) {
         </>
       )}
       {hasPermission(permissions, 'users.manage') && (
-        <NavItem to="/kullanicilar" icon={<GroupIcon />} label="Kullanıcı Yönetimi" />
+        <NavItem to="/kullanicilar" icon={<GroupIcon />} label="Kullanıcı Yönetimi" onNavigate={onNavigate} />
       )}
       {hasPermission(permissions, 'users.manage') && (
-        <NavItem to="/roller" icon={<AdminPanelSettingsIcon />} label="Roller & Yetkiler" />
+        <NavItem to="/roller" icon={<AdminPanelSettingsIcon />} label="Roller & Yetkiler" onNavigate={onNavigate} />
       )}
       {hasPermission(permissions, 'qrscanlog.view') && (
-        <NavItem to="/qr-tarama-gecmisi" icon={<HistoryIcon />} label="QR Tarama Geçmişi" />
+        <NavItem to="/qr-tarama-gecmisi" icon={<HistoryIcon />} label="QR Tarama Geçmişi" onNavigate={onNavigate} />
       )}
       {hasPermission(permissions, 'auditlog.view') && (
-        <NavItem to="/denetim-kaydi" icon={<FactCheckIcon />} label="Denetim Kaydı" />
+        <NavItem to="/denetim-kaydi" icon={<FactCheckIcon />} label="Denetim Kaydı" onNavigate={onNavigate} />
       )}
       {hasPermission(permissions, 'settings.manage') && (
-        <NavItem to="/ayarlar/sistem" icon={<SettingsIcon />} label="Sistem Ayarları" />
+        <NavItem to="/ayarlar/sistem" icon={<SettingsIcon />} label="Sistem Ayarları" onNavigate={onNavigate} />
       )}
     </List>
   )
@@ -90,14 +91,16 @@ function NavItem({
   icon,
   label,
   end,
+  onNavigate,
 }: {
   to: string
   icon: React.ReactNode
   label: string
   end?: boolean
+  onNavigate?: () => void
 }) {
   return (
-    <ListItemButton component={NavLink} to={to} end={end} sx={itemSx}>
+    <ListItemButton component={NavLink} to={to} end={end} onClick={onNavigate} sx={itemSx}>
       <ListItemIcon sx={{ minWidth: 40 }}>{icon}</ListItemIcon>
       <ListItemText primary={label} slotProps={{ primary: { sx: { fontSize: 14, fontWeight: 500 } } }} />
     </ListItemButton>

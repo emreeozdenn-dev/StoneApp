@@ -65,9 +65,10 @@ export function SetupPage() {
         alignItems: 'center',
         justifyContent: 'center',
         bgcolor: 'background.default',
+        px: 2,
       }}
     >
-      <Paper variant="outlined" sx={{ p: 4, width: 420 }}>
+      <Paper variant="outlined" sx={{ p: { xs: 3, sm: 4 }, width: '100%', maxWidth: 420 }}>
         <Typography variant="h6" sx={{ fontWeight: 700, mb: 0.5 }}>
           İlk Kurulum
         </Typography>

@@ -40,9 +40,10 @@ export function ForgotPasswordPage() {
         alignItems: 'center',
         justifyContent: 'center',
         bgcolor: 'background.default',
+        px: 2,
       }}
     >
-      <Paper variant="outlined" sx={{ p: 4, width: 380 }}>
+      <Paper variant="outlined" sx={{ p: { xs: 3, sm: 4 }, width: '100%', maxWidth: 380 }}>
         <Typography variant="h6" sx={{ fontWeight: 700, textAlign: 'center', mb: 0.5 }}>
           Şifremi Unuttum
         </Typography>

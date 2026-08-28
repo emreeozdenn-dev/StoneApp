@@ -68,9 +68,10 @@ export function LoginPage() {
         alignItems: 'center',
         justifyContent: 'center',
         bgcolor: 'background.default',
+        px: 2,
       }}
     >
-      <Paper variant="outlined" sx={{ p: 4, width: 380 }}>
+      <Paper variant="outlined" sx={{ p: { xs: 3, sm: 4 }, width: '100%', maxWidth: 380 }}>
         {branding?.logoUrl && (
           <Box sx={{ display: 'flex', justifyContent: 'center', mb: 2 }}>
             <Box
