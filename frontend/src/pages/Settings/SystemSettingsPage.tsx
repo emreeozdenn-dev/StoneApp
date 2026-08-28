@@ -366,6 +366,149 @@ function SmtpSection() {
   )
 }
 
+const templateInitialForm = {
+  newStockSubjectTemplate: '',
+  newStockBodyTemplate: '',
+  lowStockSubjectTemplate: '',
+  lowStockBodyTemplate: '',
+  plateSoldSubjectTemplate: '',
+  plateSoldBodyTemplate: '',
+}
+
+type TemplateEvent = { target: string; body: string; placeholders: string }
+
+const TEMPLATE_EVENTS: TemplateEvent[] = [
+  {
+    target: 'Yeni Stok',
+    body: 'newStockBodyTemplate',
+    placeholders: '{{TasAdi}}, {{PartiKodu}}, {{Miktar}}, {{Depo}}',
+  },
+  {
+    target: 'Düşük Stok',
+    body: 'lowStockBodyTemplate',
+    placeholders: '{{TasAdi}}, {{MinimumStok}}',
+  },
+  {
+    target: 'Plaka Satıldı',
+    body: 'plateSoldBodyTemplate',
+    placeholders: '{{PlakaNo}}, {{TasAdi}}, {{Alan}}, {{SatisTutari}}',
+  },
+]
+
+function NotificationTemplatesSection() {
+  const queryClient = useQueryClient()
+  const settingsQuery = useQuery({ queryKey: ['system-settings'], queryFn: fetchSystemSettings })
+
+  const [form, setForm] = useState(templateInitialForm)
+  const [feedback, setFeedback] = useState<FeedbackState>(null)
+
+  useEffect(() => {
+    const s = settingsQuery.data
+    if (!s) return
+    setForm({
+      newStockSubjectTemplate: s.newStockSubjectTemplate ?? '',
+      newStockBodyTemplate: s.newStockBodyTemplate ?? '',
+      lowStockSubjectTemplate: s.lowStockSubjectTemplate ?? '',
+      lowStockBodyTemplate: s.lowStockBodyTemplate ?? '',
+      plateSoldSubjectTemplate: s.plateSoldSubjectTemplate ?? '',
+      plateSoldBodyTemplate: s.plateSoldBodyTemplate ?? '',
+    })
+  }, [settingsQuery.data])
+
+  const saveMutation = useMutation({
+    mutationFn: () => {
+      const s = settingsQuery.data
+      return updateSystemSettings({
+        companyName: s?.companyName ?? null,
+        smtpHost: s?.smtpHost ?? null,
+        smtpPort: s?.smtpPort ?? null,
+        smtpUsername: s?.smtpUsername ?? null,
+        smtpPassword: null,
+        clearSmtpPassword: false,
+        smtpSenderEmail: s?.smtpSenderEmail ?? null,
+        smtpSenderName: s?.smtpSenderName ?? null,
+        smtpUseSsl: s?.smtpUseSsl ?? true,
+        notifyNewStock: s?.notifyNewStock ?? true,
+        notifyLowStock: s?.notifyLowStock ?? true,
+        notifyPlateSold: s?.notifyPlateSold ?? true,
+        ...form,
+      })
+    },
+    onSuccess: (data) => {
+      setFeedback({ kind: 'success', message: data.message })
+      queryClient.invalidateQueries({ queryKey: ['system-settings'] })
+    },
+    onError: (err: unknown) => {
+      const message =
+        (err as { response?: { data?: { message?: string } } })?.response?.data?.message ??
+        'Bildirim içerikleri kaydedilemedi.'
+      setFeedback({ kind: 'error', message })
+    },
+  })
+
+  const handleChange =
+    (field: keyof typeof form) => (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
+      setForm((prev) => ({ ...prev, [field]: e.target.value }))
+    }
+
+  return (
+    <Paper variant="outlined" sx={{ p: 3 }}>
+      <Typography variant="subtitle1" sx={{ fontWeight: 600, mb: 0.5 }}>
+        Bildirim İçerikleri
+      </Typography>
+      <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
+        Yeni Stok, Düşük Stok ve Plaka Satıldı e-postalarının konu ve gövde metinlerini
+        özelleştirin. Aşağıdaki yer tutucular gönderim sırasında ilgili değerlerle
+        değiştirilir.
+      </Typography>
+
+      <Stack spacing={3}>
+        {TEMPLATE_EVENTS.map(({ target, body, placeholders }) => {
+          const subject = body.replace('BodyTemplate', 'SubjectTemplate') as keyof typeof form
+          return (
+            <Stack key={body} spacing={1}>
+              <Typography variant="subtitle2">{target}</Typography>
+              <TextField
+                label="Konu"
+                value={form[subject]}
+                onChange={handleChange(subject)}
+                fullWidth
+                size="small"
+              />
+              <TextField
+                label="Gövde (HTML)"
+                value={form[body as keyof typeof form]}
+                onChange={handleChange(body as keyof typeof form)}
+                fullWidth
+                multiline
+                minRows={3}
+                size="small"
+              />
+              <Typography variant="caption" color="text.secondary">
+                Kullanılabilir yer tutucular: {placeholders}
+              </Typography>
+            </Stack>
+          )
+        })}
+
+        {feedback && <Alert severity={feedback.kind}>{feedback.message}</Alert>}
+
+        <Button
+          variant="contained"
+          onClick={() => {
+            setFeedback(null)
+            saveMutation.mutate()
+          }}
+          disabled={saveMutation.isPending}
+          sx={{ alignSelf: 'flex-start' }}
+        >
+          {saveMutation.isPending ? 'Kaydediliyor…' : 'Kaydet'}
+        </Button>
+      </Stack>
+    </Paper>
+  )
+}
+
 function RecipientsSection() {
   const queryClient = useQueryClient()
   const recipientsQuery = useQuery({
@@ -479,6 +622,7 @@ export function SystemSettingsPage() {
       <Stack spacing={3}>
         <CompanyInfoSection />
         <SmtpSection />
+        <NotificationTemplatesSection />
         <RecipientsSection />
       </Stack>
     </Box>

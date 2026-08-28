@@ -70,6 +70,31 @@ public sealed class SystemSettingsController : ControllerBase
         settings.NotifyLowStock = request.NotifyLowStock;
         settings.NotifyPlateSold = request.NotifyPlateSold;
 
+        if (!string.IsNullOrWhiteSpace(request.NewStockSubjectTemplate))
+        {
+            settings.NewStockSubjectTemplate = request.NewStockSubjectTemplate.Trim();
+        }
+        if (!string.IsNullOrWhiteSpace(request.NewStockBodyTemplate))
+        {
+            settings.NewStockBodyTemplate = request.NewStockBodyTemplate.Trim();
+        }
+        if (!string.IsNullOrWhiteSpace(request.LowStockSubjectTemplate))
+        {
+            settings.LowStockSubjectTemplate = request.LowStockSubjectTemplate.Trim();
+        }
+        if (!string.IsNullOrWhiteSpace(request.LowStockBodyTemplate))
+        {
+            settings.LowStockBodyTemplate = request.LowStockBodyTemplate.Trim();
+        }
+        if (!string.IsNullOrWhiteSpace(request.PlateSoldSubjectTemplate))
+        {
+            settings.PlateSoldSubjectTemplate = request.PlateSoldSubjectTemplate.Trim();
+        }
+        if (!string.IsNullOrWhiteSpace(request.PlateSoldBodyTemplate))
+        {
+            settings.PlateSoldBodyTemplate = request.PlateSoldBodyTemplate.Trim();
+        }
+
         if (request.ClearSmtpPassword)
         {
             settings.SmtpPasswordEncrypted = null;
@@ -191,7 +216,10 @@ public sealed class SystemSettingsController : ControllerBase
         s.CompanyName, s.LogoUrl,
         s.SmtpHost, s.SmtpPort, s.SmtpUsername, !string.IsNullOrEmpty(s.SmtpPasswordEncrypted),
         s.SmtpSenderEmail, s.SmtpSenderName, s.SmtpUseSsl,
-        s.NotifyNewStock, s.NotifyLowStock, s.NotifyPlateSold);
+        s.NotifyNewStock, s.NotifyLowStock, s.NotifyPlateSold,
+        s.NewStockSubjectTemplate, s.NewStockBodyTemplate,
+        s.LowStockSubjectTemplate, s.LowStockBodyTemplate,
+        s.PlateSoldSubjectTemplate, s.PlateSoldBodyTemplate);
 }
 
 [ApiController]

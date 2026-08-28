@@ -12,7 +12,13 @@ public sealed record SystemSettingsDto(
     bool SmtpUseSsl,
     bool NotifyNewStock,
     bool NotifyLowStock,
-    bool NotifyPlateSold);
+    bool NotifyPlateSold,
+    string NewStockSubjectTemplate,
+    string NewStockBodyTemplate,
+    string LowStockSubjectTemplate,
+    string LowStockBodyTemplate,
+    string PlateSoldSubjectTemplate,
+    string PlateSoldBodyTemplate);
 
 public sealed record UpdateSystemSettingsRequest(
     string? CompanyName,
@@ -26,7 +32,13 @@ public sealed record UpdateSystemSettingsRequest(
     bool SmtpUseSsl,
     bool NotifyNewStock,
     bool NotifyLowStock,
-    bool NotifyPlateSold);
+    bool NotifyPlateSold,
+    string? NewStockSubjectTemplate,
+    string? NewStockBodyTemplate,
+    string? LowStockSubjectTemplate,
+    string? LowStockBodyTemplate,
+    string? PlateSoldSubjectTemplate,
+    string? PlateSoldBodyTemplate);
 
 public sealed record TestSmtpRequest(string TestRecipientEmail);
 

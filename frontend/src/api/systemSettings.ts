@@ -13,6 +13,12 @@ export interface SystemSettings {
   notifyNewStock: boolean
   notifyLowStock: boolean
   notifyPlateSold: boolean
+  newStockSubjectTemplate: string
+  newStockBodyTemplate: string
+  lowStockSubjectTemplate: string
+  lowStockBodyTemplate: string
+  plateSoldSubjectTemplate: string
+  plateSoldBodyTemplate: string
 }
 
 export async function fetchSystemSettings(): Promise<SystemSettings> {
@@ -33,6 +39,12 @@ export interface UpdateSystemSettingsPayload {
   notifyNewStock: boolean
   notifyLowStock: boolean
   notifyPlateSold: boolean
+  newStockSubjectTemplate?: string
+  newStockBodyTemplate?: string
+  lowStockSubjectTemplate?: string
+  lowStockBodyTemplate?: string
+  plateSoldSubjectTemplate?: string
+  plateSoldBodyTemplate?: string
 }
 
 export async function updateSystemSettings(payload: UpdateSystemSettingsPayload) {

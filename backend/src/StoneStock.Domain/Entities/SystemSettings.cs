@@ -22,4 +22,19 @@ public sealed class SystemSettings
     public bool NotifyNewStock { get; set; } = true;
     public bool NotifyLowStock { get; set; } = true;
     public bool NotifyPlateSold { get; set; } = true;
+
+    public string NewStockSubjectTemplate { get; set; } = "Yeni Stok: {{TasAdi}} ({{PartiKodu}})";
+    public string NewStockBodyTemplate { get; set; } =
+        "<p><strong>{{TasAdi}}</strong> taşından yeni parti geldi.</p>" +
+        "<p>Parti Kodu: {{PartiKodu}}<br/>Miktar: {{Miktar}}<br/>Depo: {{Depo}}</p>";
+
+    public string LowStockSubjectTemplate { get; set; } = "Düşük Stok Uyarısı: {{TasAdi}}";
+    public string LowStockBodyTemplate { get; set; } =
+        "<p><strong>{{TasAdi}}</strong> taşının stoğu minimum seviyenin altına düştü.</p>" +
+        "<p>Minimum Stok: {{MinimumStok}} m²</p>";
+
+    public string PlateSoldSubjectTemplate { get; set; } = "Plaka Satıldı: {{PlakaNo}}";
+    public string PlateSoldBodyTemplate { get; set; } =
+        "<p><strong>{{PlakaNo}}</strong> ({{TasAdi}}) plakası satıldı olarak işaretlendi.</p>" +
+        "<p>Alan: {{Alan}} m²<br/>Satış Tutarı: {{SatisTutari}}</p>";
 }

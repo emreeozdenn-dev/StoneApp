@@ -36,10 +36,17 @@ public sealed class NotificationDispatcher : INotificationDispatcher
             return;
         }
 
+        var placeholders = new Dictionary<string, string>
+        {
+            ["TasAdi"] = stock.Stone.Name,
+            ["PartiKodu"] = stock.BatchCode,
+            ["Miktar"] = stock.Quantity.ToString(),
+            ["Depo"] = stock.Warehouse,
+        };
+
         await DispatchAsync(db, protector, mailer, settings, NotificationType.YeniStok,
-            $"Yeni Stok: {stock.Stone.Name} ({stock.BatchCode})",
-            $"<p><strong>{stock.Stone.Name}</strong> taşından yeni parti geldi.</p>" +
-            $"<p>Parti Kodu: {stock.BatchCode}<br/>Miktar: {stock.Quantity}<br/>Depo: {stock.Warehouse}</p>");
+            Render(settings.NewStockSubjectTemplate, placeholders),
+            Render(settings.NewStockBodyTemplate, placeholders));
     });
 
     public void QueueLowStock(int stoneId) => Run(async (db, protector, mailer) =>
@@ -56,10 +63,15 @@ public sealed class NotificationDispatcher : INotificationDispatcher
             return;
         }
 
+        var placeholders = new Dictionary<string, string>
+        {
+            ["TasAdi"] = stone.Name,
+            ["MinimumStok"] = stone.MinimumStock.ToString(),
+        };
+
         await DispatchAsync(db, protector, mailer, settings, NotificationType.DusukStok,
-            $"Düşük Stok Uyarısı: {stone.Name}",
-            $"<p><strong>{stone.Name}</strong> taşının stoğu minimum seviyenin altına düştü.</p>" +
-            $"<p>Minimum Stok: {stone.MinimumStock} m²</p>");
+            Render(settings.LowStockSubjectTemplate, placeholders),
+            Render(settings.LowStockBodyTemplate, placeholders));
     });
 
     public void QueuePlateSold(int plateId) => Run(async (db, protector, mailer) =>
@@ -76,12 +88,29 @@ public sealed class NotificationDispatcher : INotificationDispatcher
             return;
         }
 
-        var saleLine = plate.SaleAmount != null ? $"<br/>Satış Tutarı: {plate.SaleAmount}" : string.Empty;
+        var placeholders = new Dictionary<string, string>
+        {
+            ["PlakaNo"] = plate.PlateNo,
+            ["TasAdi"] = plate.Stone.Name,
+            ["Alan"] = plate.Area.ToString(),
+            ["SatisTutari"] = plate.SaleAmount?.ToString() ?? "Belirtilmedi",
+        };
+
         await DispatchAsync(db, protector, mailer, settings, NotificationType.PlakaSatildi,
-            $"Plaka Satıldı: {plate.PlateNo}",
-            $"<p><strong>{plate.PlateNo}</strong> ({plate.Stone.Name}) plakası satıldı olarak işaretlendi.</p>" +
-            $"<p>Alan: {plate.Area} m²{saleLine}</p>");
+            Render(settings.PlateSoldSubjectTemplate, placeholders),
+            Render(settings.PlateSoldBodyTemplate, placeholders));
     });
+
+    private static string Render(string template, Dictionary<string, string> placeholders)
+    {
+        var result = template;
+        foreach (var (key, value) in placeholders)
+        {
+            result = result.Replace("{{" + key + "}}", value);
+        }
+
+        return result;
+    }
 
     private void Run(Func<AppDbContext, IDataProtector, IEmailSender, Task> action)
     {

@@ -1,5 +1,6 @@
-using System.Net;
-using System.Net.Mail;
+using MailKit.Net.Smtp;
+using MailKit.Security;
+using MimeKit;
 using StoneStock.Application.Notifications;
 
 namespace StoneStock.Infrastructure.Notifications;
@@ -11,25 +12,23 @@ public sealed class SmtpEmailSender : IEmailSender
     {
         try
         {
-            using var client = new SmtpClient(options.Host, options.Port)
-            {
-                EnableSsl = options.UseSsl,
-            };
+            var message = new MimeMessage();
+            message.From.Add(new MailboxAddress(options.SenderName, options.SenderEmail));
+            message.To.Add(MailboxAddress.Parse(to));
+            message.Subject = subject;
+            message.Body = new BodyBuilder { HtmlBody = htmlBody }.ToMessageBody();
+
+            using var client = new SmtpClient();
+            var socketOptions = options.UseSsl ? SecureSocketOptions.StartTlsWhenAvailable : SecureSocketOptions.None;
+            await client.ConnectAsync(options.Host, options.Port, socketOptions, ct);
+
             if (!string.IsNullOrEmpty(options.Username))
             {
-                client.Credentials = new NetworkCredential(options.Username, options.Password);
+                await client.AuthenticateAsync(options.Username, options.Password, ct);
             }
 
-            using var message = new MailMessage
-            {
-                From = new MailAddress(options.SenderEmail, options.SenderName),
-                Subject = subject,
-                Body = htmlBody,
-                IsBodyHtml = true,
-            };
-            message.To.Add(to);
-
-            await client.SendMailAsync(message, ct);
+            await client.SendAsync(message, ct);
+            await client.DisconnectAsync(true, ct);
             return (true, null);
         }
         catch (Exception ex) when (ex is not OperationCanceledException)
