@@ -9,15 +9,20 @@ namespace StoneStock.Infrastructure.Notifications;
 
 public sealed class SmtpEmailSender : IEmailSender
 {
-    // Bazı barındırma ortamlarında (ör. Railway) giden IPv6 bağlantıları yanıtsız kalıp
-    // bağlantıyı dakikalarca askıda bırakabiliyor. Soketi elle IPv4 adresine bağlayıp
-    // (TLS doğrulaması yine orijinal host adına göre yapılır) ve kısa bir zaman aşımı
-    // koyarak bu durumu hızlı ve net bir hataya çeviriyoruz.
-    private static readonly TimeSpan ConnectTimeout = TimeSpan.FromSeconds(20);
+    // Bazı barındırma ortamlarında (ör. Railway) giden IPv6 bağlantıları ya da SMTP
+    // el sıkışmasının bir aşaması yanıtsız kalıp isteği dakikalarca askıda bırakabiliyor.
+    // Bağlan-doğrula-gönder adımlarının TAMAMINI tek bir zaman aşımı altında çalıştırıp
+    // soketi elle IPv4 adresine bağlıyoruz (TLS doğrulaması yine orijinal host adına
+    // göre yapılır), böylece askıda kalma yerine net bir hata dönüyor.
+    private static readonly TimeSpan OperationTimeout = TimeSpan.FromSeconds(30);
 
     public async Task<(bool Success, string? Error)> SendAsync(
         SmtpSendOptions options, string to, string subject, string htmlBody, CancellationToken ct)
     {
+        using var timeoutCts = CancellationTokenSource.CreateLinkedTokenSource(ct);
+        timeoutCts.CancelAfter(OperationTimeout);
+        var token = timeoutCts.Token;
+
         try
         {
             var message = new MimeMessage();
@@ -26,35 +31,32 @@ public sealed class SmtpEmailSender : IEmailSender
             message.Subject = subject;
             message.Body = new BodyBuilder { HtmlBody = htmlBody }.ToMessageBody();
 
-            using var client = new SmtpClient { Timeout = (int)ConnectTimeout.TotalMilliseconds };
+            using var client = new SmtpClient { Timeout = (int)OperationTimeout.TotalMilliseconds };
             var socketOptions = options.UseSsl ? SecureSocketOptions.StartTlsWhenAvailable : SecureSocketOptions.None;
 
-            using var timeoutCts = CancellationTokenSource.CreateLinkedTokenSource(ct);
-            timeoutCts.CancelAfter(ConnectTimeout);
-
-            var socket = await ConnectIPv4SocketAsync(options.Host, options.Port, timeoutCts.Token);
+            var socket = await ConnectIPv4SocketAsync(options.Host, options.Port, token);
             if (socket is not null)
             {
-                await client.ConnectAsync(socket, options.Host, options.Port, socketOptions, timeoutCts.Token);
+                await client.ConnectAsync(socket, options.Host, options.Port, socketOptions, token);
             }
             else
             {
-                // IPv4 çözümlenemedi; MailKit'in kendi çözümlemesine (IPv6 dahil) düş.
-                await client.ConnectAsync(options.Host, options.Port, socketOptions, timeoutCts.Token);
+                // IPv4 çözümlenemedi/bağlanılamadı; MailKit'in kendi çözümlemesine (IPv6 dahil) düş.
+                await client.ConnectAsync(options.Host, options.Port, socketOptions, token);
             }
 
             if (!string.IsNullOrEmpty(options.Username))
             {
-                await client.AuthenticateAsync(options.Username, options.Password, ct);
+                await client.AuthenticateAsync(options.Username, options.Password, token);
             }
 
-            await client.SendAsync(message, ct);
-            await client.DisconnectAsync(true, ct);
+            await client.SendAsync(message, token);
+            await client.DisconnectAsync(true, token);
             return (true, null);
         }
         catch (OperationCanceledException) when (!ct.IsCancellationRequested)
         {
-            return (false, $"SMTP sunucusuna {ConnectTimeout.TotalSeconds:0} saniye içinde bağlanılamadı (zaman aşımı).");
+            return (false, $"SMTP işlemi {OperationTimeout.TotalSeconds:0} saniye içinde tamamlanamadı (zaman aşımı). Sunucu adresi/port doğru mu ve barındırma ortamınız bu porta giden trafiğe izin veriyor mu kontrol edin.");
         }
         catch (Exception ex) when (ex is not OperationCanceledException)
         {
@@ -90,7 +92,7 @@ public sealed class SmtpEmailSender : IEmailSender
             await socket.ConnectAsync(ipv4, port, ct);
             return socket;
         }
-        catch
+        catch (Exception) when (!ct.IsCancellationRequested)
         {
             socket.Dispose();
             return null;
