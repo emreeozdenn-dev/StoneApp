@@ -23,6 +23,10 @@ export function LoginPage() {
   const brandingQuery = useQuery({ queryKey: ['company-branding'], queryFn: fetchCompanyBranding })
   const branding = brandingQuery.data
 
+  useEffect(() => {
+    document.title = branding?.companyName || 'Mermer Stok Yönetimi'
+  }, [branding?.companyName])
+
   const [usernameOrEmail, setUsernameOrEmail] = useState('')
   const [password, setPassword] = useState('')
   const [error, setError] = useState<string | null>(null)

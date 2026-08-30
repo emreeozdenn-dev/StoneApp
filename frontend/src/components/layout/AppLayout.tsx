@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { Outlet, useNavigate } from 'react-router-dom'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import {
@@ -29,6 +29,10 @@ export function AppLayout() {
   const brandingQuery = useQuery({ queryKey: ['company-branding'], queryFn: fetchCompanyBranding, enabled: !!user })
   const branding = brandingQuery.data
   const [mobileOpen, setMobileOpen] = useState(false)
+
+  useEffect(() => {
+    document.title = branding?.companyName || 'Mermer Stok Yönetimi'
+  }, [branding?.companyName])
 
   const handleLogout = async () => {
     try {
