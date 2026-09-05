@@ -10,6 +10,7 @@ export interface UserListItem {
   status: 'Aktif' | 'Pasif'
   createdAt: string
   lastLoginAt: string | null
+  twoFactorEnabled: boolean
 }
 
 export interface Role {

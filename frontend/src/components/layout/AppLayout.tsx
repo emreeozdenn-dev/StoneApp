@@ -124,13 +124,19 @@ export function AppLayout() {
               {user && (
                 <Stack direction="row" spacing={1} sx={{ alignItems: 'center' }}>
                   <Chip label={user.role} size="small" color="primary" variant="outlined" sx={{ display: { xs: 'none', sm: 'inline-flex' } }} />
-                  <Avatar sx={{ width: 32, height: 32, fontSize: 14 }}>
-                    {user.firstName.charAt(0)}
-                    {user.lastName.charAt(0)}
-                  </Avatar>
-                  <Typography variant="body2" sx={{ display: { xs: 'none', sm: 'block' } }}>
-                    {user.firstName} {user.lastName}
-                  </Typography>
+                  <Button
+                    size="small"
+                    onClick={() => navigate('/hesabim')}
+                    sx={{ minWidth: 0, textTransform: 'none', color: 'text.primary' }}
+                  >
+                    <Avatar sx={{ width: 32, height: 32, fontSize: 14, mr: { xs: 0, sm: 1 } }}>
+                      {user.firstName.charAt(0)}
+                      {user.lastName.charAt(0)}
+                    </Avatar>
+                    <Typography variant="body2" sx={{ display: { xs: 'none', sm: 'block' } }}>
+                      {user.firstName} {user.lastName}
+                    </Typography>
+                  </Button>
                   <Button
                     size="small"
                     startIcon={<LogoutIcon />}

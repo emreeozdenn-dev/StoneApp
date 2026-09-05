@@ -15,4 +15,8 @@ public sealed class User
     public UserStatus Status { get; set; } = UserStatus.Aktif;
     public DateTimeOffset CreatedAt { get; set; } = DateTimeOffset.UtcNow;
     public DateTimeOffset? LastLoginAt { get; set; }
+
+    public bool TwoFactorEnabled { get; set; }
+    public string? TwoFactorSecretEncrypted { get; set; }
+    public DateTimeOffset? TwoFactorEnabledAt { get; set; }
 }

@@ -65,6 +65,7 @@ if (!string.IsNullOrWhiteSpace(connectionString))
 builder.Services.AddMemoryCache();
 builder.Services.AddDataProtection().SetApplicationName("StoneStock");
 builder.Services.AddSingleton<IEmailSender, SmtpEmailSender>();
+builder.Services.AddSingleton<ITotpService, TotpService>();
 builder.Services.AddSingleton<INotificationDispatcher, NotificationDispatcher>();
 builder.Services.AddScoped<ISupabaseAuthClient>(sp =>
     new SupabaseAuthClient(

@@ -35,7 +35,7 @@ public sealed class UsersController : ControllerBase
             .OrderBy(u => u.CreatedAt)
             .Select(u => new UserListItemDto(
                 u.Id, u.FirstName, u.LastName, u.Username, u.Email,
-                u.Role.Name, u.Status.ToString(), u.CreatedAt, u.LastLoginAt))
+                u.Role.Name, u.Status.ToString(), u.CreatedAt, u.LastLoginAt, u.TwoFactorEnabled))
             .ToListAsync(ct);
         return Ok(users);
     }

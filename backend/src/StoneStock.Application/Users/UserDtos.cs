@@ -9,7 +9,8 @@ public sealed record UserListItemDto(
     string Role,
     string Status,
     DateTimeOffset CreatedAt,
-    DateTimeOffset? LastLoginAt);
+    DateTimeOffset? LastLoginAt,
+    bool TwoFactorEnabled);
 
 public sealed record CreateUserRequest(
     string FirstName,

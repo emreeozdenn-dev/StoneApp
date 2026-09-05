@@ -11,7 +11,7 @@ import {
   TextField,
   Typography,
 } from '@mui/material'
-import { fetchSetupRequired, login } from '../../api/auth'
+import { fetchSetupRequired, login, verifyTwoFactorLogin } from '../../api/auth'
 import { fetchCompanyBranding } from '../../api/systemSettings'
 import { useCurrentUser } from '../../auth/useCurrentUser'
 
@@ -33,6 +33,9 @@ export function LoginPage() {
   const [submitting, setSubmitting] = useState(false)
   const [setupRequired, setSetupRequired] = useState<boolean | null>(null)
 
+  const [pendingToken, setPendingToken] = useState<string | null>(null)
+  const [twoFactorCode, setTwoFactorCode] = useState('')
+
   useEffect(() => {
     fetchSetupRequired().then(setSetupRequired)
   }, [])
@@ -45,19 +48,46 @@ export function LoginPage() {
     return <Navigate to="/kurulum" replace />
   }
 
+  const finishLogin = async () => {
+    await queryClient.invalidateQueries({ queryKey: ['currentUser'] })
+    const returnUrl = searchParams.get('returnUrl')
+    navigate(returnUrl ? decodeURIComponent(returnUrl) : '/', { replace: true })
+  }
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     setError(null)
     setSubmitting(true)
     try {
-      await login(usernameOrEmail, password)
-      await queryClient.invalidateQueries({ queryKey: ['currentUser'] })
-      const returnUrl = searchParams.get('returnUrl')
-      navigate(returnUrl ? decodeURIComponent(returnUrl) : '/', { replace: true })
+      const result = await login(usernameOrEmail, password)
+      if (result.requiresTwoFactor && result.pendingToken) {
+        setPendingToken(result.pendingToken)
+        setTwoFactorCode('')
+      } else {
+        await finishLogin()
+      }
     } catch (err: unknown) {
       const message =
         (err as { response?: { data?: { message?: string } } })?.response?.data?.message ??
         'Giriş başarısız oldu.'
+      setError(message)
+    } finally {
+      setSubmitting(false)
+    }
+  }
+
+  const handleVerifyTwoFactor = async (e: React.FormEvent) => {
+    e.preventDefault()
+    if (!pendingToken) return
+    setError(null)
+    setSubmitting(true)
+    try {
+      await verifyTwoFactorLogin(pendingToken, twoFactorCode)
+      await finishLogin()
+    } catch (err: unknown) {
+      const message =
+        (err as { response?: { data?: { message?: string } } })?.response?.data?.message ??
+        'Doğrulama başarısız oldu.'
       setError(message)
     } finally {
       setSubmitting(false)
@@ -90,34 +120,66 @@ export function LoginPage() {
           Mermer Stok Yönetimi Sistemi
         </Typography>
         <Typography variant="body2" color="text.secondary" sx={{ textAlign: 'center', mb: 3 }}>
-          Devam etmek için giriş yapın
+          {pendingToken ? 'Authenticator uygulamanızdaki 6 haneli kodu girin' : 'Devam etmek için giriş yapın'}
         </Typography>
 
-        <Box component="form" onSubmit={handleSubmit}>
-          <Stack spacing={2}>
-            <TextField
-              label="Kullanıcı adı veya e-posta"
-              value={usernameOrEmail}
-              onChange={(e) => setUsernameOrEmail(e.target.value)}
-              autoFocus
-              fullWidth
-            />
-            <TextField
-              label="Şifre"
-              type="password"
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-              fullWidth
-            />
-            {error && <Alert severity="error">{error}</Alert>}
-            <Button type="submit" variant="contained" size="large" disabled={submitting}>
-              {submitting ? 'Giriş yapılıyor…' : 'Giriş Yap'}
-            </Button>
-            <Link component={RouterLink} to="/sifremi-unuttum" variant="body2" sx={{ textAlign: 'center' }}>
-              Şifremi unuttum
-            </Link>
-          </Stack>
-        </Box>
+        {pendingToken ? (
+          <Box component="form" onSubmit={handleVerifyTwoFactor}>
+            <Stack spacing={2}>
+              <TextField
+                label="Doğrulama Kodu"
+                value={twoFactorCode}
+                onChange={(e) => setTwoFactorCode(e.target.value)}
+                autoFocus
+                fullWidth
+                slotProps={{ htmlInput: { inputMode: 'numeric', maxLength: 6 } }}
+              />
+              {error && <Alert severity="error">{error}</Alert>}
+              <Button type="submit" variant="contained" size="large" disabled={submitting || twoFactorCode.length === 0}>
+                {submitting ? 'Doğrulanıyor…' : 'Doğrula'}
+              </Button>
+              <Link
+                component="button"
+                type="button"
+                variant="body2"
+                sx={{ textAlign: 'center' }}
+                onClick={() => {
+                  setPendingToken(null)
+                  setTwoFactorCode('')
+                  setError(null)
+                }}
+              >
+                Geri dön
+              </Link>
+            </Stack>
+          </Box>
+        ) : (
+          <Box component="form" onSubmit={handleSubmit}>
+            <Stack spacing={2}>
+              <TextField
+                label="Kullanıcı adı veya e-posta"
+                value={usernameOrEmail}
+                onChange={(e) => setUsernameOrEmail(e.target.value)}
+                autoFocus
+                fullWidth
+              />
+              <TextField
+                label="Şifre"
+                type="password"
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                fullWidth
+              />
+              {error && <Alert severity="error">{error}</Alert>}
+              <Button type="submit" variant="contained" size="large" disabled={submitting}>
+                {submitting ? 'Giriş yapılıyor…' : 'Giriş Yap'}
+              </Button>
+              <Link component={RouterLink} to="/sifremi-unuttum" variant="body2" sx={{ textAlign: 'center' }}>
+                Şifremi unuttum
+              </Link>
+            </Stack>
+          </Box>
+        )}
       </Paper>
     </Box>
   )

@@ -29,6 +29,7 @@ import {
   setUserStatus,
   type UserListItem,
 } from '../../api/users'
+import { adminResetTwoFactor } from '../../api/twoFactor'
 import { useCurrentUser } from '../../auth/useCurrentUser'
 
 function generatePassword(length = 12): string {
@@ -77,6 +78,11 @@ export function UsersPage() {
 
   const statusMutation = useMutation({
     mutationFn: ({ id, active }: { id: number; active: boolean }) => setUserStatus(id, active),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['users'] }),
+  })
+
+  const twoFactorResetMutation = useMutation({
+    mutationFn: adminResetTwoFactor,
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ['users'] }),
   })
 
@@ -148,6 +154,7 @@ export function UsersPage() {
             <TableCell>E-posta</TableCell>
             <TableCell>Rol</TableCell>
             <TableCell>Durum</TableCell>
+            <TableCell>2FA</TableCell>
             <TableCell>Son Giriş</TableCell>
             <TableCell align="right">Aktif</TableCell>
             <TableCell align="right">İşlem</TableCell>
@@ -172,6 +179,14 @@ export function UsersPage() {
                   variant={u.status === 'Aktif' ? 'filled' : 'outlined'}
                 />
               </TableCell>
+              <TableCell>
+                <Chip
+                  label={u.twoFactorEnabled ? 'Etkin' : 'Kapalı'}
+                  size="small"
+                  color={u.twoFactorEnabled ? 'success' : 'default'}
+                  variant={u.twoFactorEnabled ? 'filled' : 'outlined'}
+                />
+              </TableCell>
               <TableCell>{u.lastLoginAt ? new Date(u.lastLoginAt).toLocaleString('tr-TR') : '—'}</TableCell>
               <TableCell align="right">
                 <Switch
@@ -192,6 +207,15 @@ export function UsersPage() {
                   >
                     Şifre Sıfırla
                   </Button>
+                  {u.twoFactorEnabled && (
+                    <Button
+                      size="small"
+                      onClick={() => twoFactorResetMutation.mutate(u.id)}
+                      disabled={twoFactorResetMutation.isPending}
+                    >
+                      2FA Sıfırla
+                    </Button>
+                  )}
                   <Button
                     size="small"
                     color="error"

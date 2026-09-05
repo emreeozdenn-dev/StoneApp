@@ -25,6 +25,9 @@ const actionLabel: Record<string, string> = {
   PasswordReset: 'Şifre Sıfırlandı',
   Sold: 'Satıldı',
   PermissionsUpdated: 'Yetkiler Güncellendi',
+  TwoFactorEnabled: '2FA Etkinleştirildi',
+  TwoFactorDisabled: '2FA Kapatıldı',
+  TwoFactorReset: '2FA Sıfırlandı',
 }
 
 const actionColor: Record<string, 'success' | 'default' | 'error' | 'warning'> = {
@@ -35,6 +38,9 @@ const actionColor: Record<string, 'success' | 'default' | 'error' | 'warning'> =
   PasswordReset: 'warning',
   Sold: 'success',
   PermissionsUpdated: 'warning',
+  TwoFactorEnabled: 'success',
+  TwoFactorDisabled: 'warning',
+  TwoFactorReset: 'warning',
 }
 
 const recordTypeLabel: Record<string, string> = {

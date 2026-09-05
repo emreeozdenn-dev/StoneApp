@@ -15,9 +15,20 @@ export async function fetchCurrentUser(): Promise<CurrentUser> {
   return data
 }
 
+export interface LoginResult {
+  message: string
+  requiresTwoFactor: boolean
+  pendingToken?: string
+}
+
 export async function login(usernameOrEmail: string, password: string) {
   const { data } = await apiClient.post('/auth/login', { usernameOrEmail, password })
-  return data as { message: string }
+  return data as LoginResult
+}
+
+export async function verifyTwoFactorLogin(pendingToken: string, code: string) {
+  const { data } = await apiClient.post('/auth/login/verify-2fa', { pendingToken, code })
+  return data as LoginResult
 }
 
 export async function logout() {

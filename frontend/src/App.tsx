@@ -16,6 +16,7 @@ import { QrScanHistoryPage } from './pages/QrScanHistory/QrScanHistoryPage'
 import { NotificationsPage } from './pages/Notifications/NotificationsPage'
 import { SystemSettingsPage } from './pages/Settings/SystemSettingsPage'
 import { AuditLogPage } from './pages/AuditLog/AuditLogPage'
+import { MyAccountPage } from './pages/Account/MyAccountPage'
 
 function App() {
   return (
@@ -28,6 +29,7 @@ function App() {
         <Route element={<AppLayout />}>
           <Route path="/" element={<DashboardPage />} />
           <Route path="/qr-tara" element={<QrScanPage />} />
+          <Route path="/hesabim" element={<MyAccountPage />} />
 
           <Route element={<ProtectedRoute permission="stones.view" />}>
             <Route path="/taslar" element={<StonesPage />} />

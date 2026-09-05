@@ -3,6 +3,7 @@ using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.DataProtection;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Caching.Memory;
 using Microsoft.Extensions.Logging;
 using StoneStock.Api.Auth;
 using StoneStock.Application.Auth;
@@ -21,11 +22,16 @@ public sealed class AuthController : ControllerBase
 {
     private const string TempPasswordChars = "ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnpqrstuvwxyz23456789";
 
+    private const int MaxTwoFactorAttempts = 5;
+    private static readonly TimeSpan PendingTwoFactorTtl = TimeSpan.FromMinutes(5);
+
     private readonly AppDbContext _db;
     private readonly ISupabaseAuthClient _authClient;
     private readonly ISupabaseAdminClient _adminClient;
     private readonly IDataProtectionProvider _dataProtectionProvider;
     private readonly IEmailSender _emailSender;
+    private readonly ITotpService _totpService;
+    private readonly IMemoryCache _memoryCache;
     private readonly ILogger<AuthController> _logger;
 
     public AuthController(
@@ -34,6 +40,8 @@ public sealed class AuthController : ControllerBase
         ISupabaseAdminClient adminClient,
         IDataProtectionProvider dataProtectionProvider,
         IEmailSender emailSender,
+        ITotpService totpService,
+        IMemoryCache memoryCache,
         ILogger<AuthController> logger)
     {
         _db = db;
@@ -41,8 +49,19 @@ public sealed class AuthController : ControllerBase
         _adminClient = adminClient;
         _dataProtectionProvider = dataProtectionProvider;
         _emailSender = emailSender;
+        _totpService = totpService;
+        _memoryCache = memoryCache;
         _logger = logger;
     }
+
+    private sealed class PendingTwoFactorLogin
+    {
+        public required int UserId { get; init; }
+        public required SupabaseTokenResult Tokens { get; init; }
+        public int Attempts { get; set; }
+    }
+
+    private static string PendingTwoFactorCacheKey(string pendingToken) => $"2fa-pending-login:{pendingToken}";
 
     [HttpGet("setup-required")]
     [AllowAnonymous]
@@ -117,12 +136,64 @@ public sealed class AuthController : ControllerBase
             return Unauthorized(new { message = "Kullanıcı adı/e-posta veya şifre hatalı." });
         }
 
+        if (user.TwoFactorEnabled)
+        {
+            var pendingToken = Guid.NewGuid().ToString("N");
+            _memoryCache.Set(
+                PendingTwoFactorCacheKey(pendingToken),
+                new PendingTwoFactorLogin { UserId = user.Id, Tokens = tokens },
+                PendingTwoFactorTtl);
+
+            return Ok(new { message = "Doğrulama kodu gerekli.", requiresTwoFactor = true, pendingToken });
+        }
+
         CookieAuth.SetAuthCookies(Response, tokens);
 
         user.LastLoginAt = DateTimeOffset.UtcNow;
         await _db.SaveChangesAsync(ct);
 
-        return Ok(new { message = "Giriş başarılı." });
+        return Ok(new { message = "Giriş başarılı.", requiresTwoFactor = false });
+    }
+
+    [HttpPost("login/verify-2fa")]
+    [AllowAnonymous]
+    public async Task<IActionResult> VerifyTwoFactorLogin([FromBody] VerifyTwoFactorLoginRequest request, CancellationToken ct)
+    {
+        var cacheKey = PendingTwoFactorCacheKey(request.PendingToken ?? string.Empty);
+        if (!_memoryCache.TryGetValue(cacheKey, out PendingTwoFactorLogin? pending) || pending is null)
+        {
+            return BadRequest(new { message = "Oturum süresi doldu. Lütfen tekrar giriş yapın." });
+        }
+
+        var user = await _db.Users.FindAsync([pending.UserId], ct);
+        if (user is null || !user.TwoFactorEnabled || string.IsNullOrEmpty(user.TwoFactorSecretEncrypted))
+        {
+            _memoryCache.Remove(cacheKey);
+            return BadRequest(new { message = "Doğrulama başarısız. Lütfen tekrar giriş yapın." });
+        }
+
+        var protector = _dataProtectionProvider.CreateProtector(TwoFactorConstants.ProtectorName);
+        var secret = protector.Unprotect(user.TwoFactorSecretEncrypted);
+
+        if (!_totpService.VerifyCode(secret, request.Code ?? string.Empty))
+        {
+            pending.Attempts++;
+            if (pending.Attempts >= MaxTwoFactorAttempts)
+            {
+                _memoryCache.Remove(cacheKey);
+                return BadRequest(new { message = "Çok fazla hatalı deneme. Lütfen tekrar giriş yapın." });
+            }
+
+            return BadRequest(new { message = "Kod hatalı." });
+        }
+
+        _memoryCache.Remove(cacheKey);
+        CookieAuth.SetAuthCookies(Response, pending.Tokens);
+
+        user.LastLoginAt = DateTimeOffset.UtcNow;
+        await _db.SaveChangesAsync(ct);
+
+        return Ok(new { message = "Giriş başarılı.", requiresTwoFactor = false });
     }
 
     [HttpPost("forgot-password")]
