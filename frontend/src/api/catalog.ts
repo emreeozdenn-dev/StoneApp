@@ -61,6 +61,32 @@ export async function deleteStone(id: number) {
   return data as { message: string }
 }
 
+export async function downloadStoneImportTemplate() {
+  const { data } = await apiClient.get('/stones/import-template', { responseType: 'blob' })
+  return data as Blob
+}
+
+export interface StoneImportRowError {
+  row: number
+  code: string | null
+  message: string
+}
+
+export interface StoneImportResult {
+  created: number
+  failed: number
+  errors: StoneImportRowError[]
+}
+
+export async function importStones(file: File) {
+  const formData = new FormData()
+  formData.append('file', file)
+  const { data } = await apiClient.post('/stones/import', formData, {
+    headers: { 'Content-Type': 'multipart/form-data' },
+  })
+  return data as StoneImportResult
+}
+
 export interface IncomingStock {
   id: number
   stoneId: number

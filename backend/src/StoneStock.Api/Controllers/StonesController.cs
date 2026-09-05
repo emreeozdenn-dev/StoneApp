@@ -1,3 +1,5 @@
+using System.Globalization;
+using ClosedXML.Excel;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
@@ -74,6 +76,175 @@ public sealed class StonesController : ControllerBase
         await _db.SaveChangesAsync(ct);
 
         return Ok(new { message = "Taş oluşturuldu.", id = stone.Id });
+    }
+
+    private static readonly string[] ImportHeaders = { "Taş Adı", "Kod", "Tip", "Menşei", "Renk", "Min Stok" };
+
+    [HttpGet("import-template")]
+    [Authorize(Policy = PermissionKeys.StonesCreate)]
+    public IActionResult DownloadImportTemplate()
+    {
+        using var workbook = new XLWorkbook();
+        var sheet = workbook.Worksheets.Add("Taşlar");
+        for (var i = 0; i < ImportHeaders.Length; i++)
+        {
+            var cell = sheet.Cell(1, i + 1);
+            cell.Value = ImportHeaders[i];
+            cell.Style.Font.Bold = true;
+            cell.Style.Fill.BackgroundColor = XLColor.FromHtml("#E3F2FD");
+        }
+        sheet.SheetView.FreezeRows(1);
+        sheet.Columns(1, ImportHeaders.Length).Width = 20;
+
+        using var stream = new MemoryStream();
+        workbook.SaveAs(stream);
+
+        return File(
+            stream.ToArray(),
+            "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+            "taslar-sablon.xlsx");
+    }
+
+    [HttpPost("import")]
+    [Authorize(Policy = PermissionKeys.StonesCreate)]
+    public async Task<ActionResult<StoneImportResult>> Import(IFormFile file, CancellationToken ct)
+    {
+        if (file is null || file.Length == 0)
+        {
+            return BadRequest(new { message = "Excel dosyası gerekli." });
+        }
+
+        var rows = new List<(int Row, string Name, string Code, string Type, string Origin, string Color, decimal MinimumStock)>();
+        var errors = new List<StoneImportRowError>();
+
+        try
+        {
+            using var stream = file.OpenReadStream();
+            using var workbook = new XLWorkbook(stream);
+            var sheet = workbook.Worksheets.FirstOrDefault();
+            if (sheet is null)
+            {
+                return BadRequest(new { message = "Excel dosyasında sayfa bulunamadı." });
+            }
+
+            var headerMap = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
+            foreach (var cell in sheet.Row(1).CellsUsed())
+            {
+                var text = cell.GetString().Trim();
+                if (!string.IsNullOrEmpty(text) && !headerMap.ContainsKey(text))
+                {
+                    headerMap[text] = cell.Address.ColumnNumber;
+                }
+            }
+
+            if (!headerMap.TryGetValue("Taş Adı", out var nameCol) || !headerMap.TryGetValue("Kod", out var codeCol))
+            {
+                return BadRequest(new { message = "Şablon sütunları eksik veya değiştirilmiş. Lütfen sağlanan şablonu kullanın." });
+            }
+            headerMap.TryGetValue("Tip", out var typeCol);
+            headerMap.TryGetValue("Menşei", out var originCol);
+            headerMap.TryGetValue("Renk", out var colorCol);
+            headerMap.TryGetValue("Min Stok", out var minStockCol);
+
+            var existingCodes = new HashSet<string>(
+                await _db.Stones.Select(s => s.Code).ToListAsync(ct),
+                StringComparer.OrdinalIgnoreCase);
+            var seenCodes = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+
+            foreach (var row in sheet.RowsUsed().Skip(1))
+            {
+                var rowNumber = row.RowNumber();
+                var name = row.Cell(nameCol).GetString().Trim();
+                var code = row.Cell(codeCol).GetString().Trim();
+                if (string.IsNullOrEmpty(name) && string.IsNullOrEmpty(code))
+                {
+                    continue;
+                }
+
+                if (string.IsNullOrEmpty(name) || string.IsNullOrEmpty(code))
+                {
+                    errors.Add(new StoneImportRowError(rowNumber, string.IsNullOrEmpty(code) ? null : code, "Taş Adı ve Kod zorunludur."));
+                    continue;
+                }
+
+                if (!seenCodes.Add(code))
+                {
+                    errors.Add(new StoneImportRowError(rowNumber, code, "Bu kod dosyada birden fazla kez kullanılmış."));
+                    continue;
+                }
+
+                if (existingCodes.Contains(code))
+                {
+                    errors.Add(new StoneImportRowError(rowNumber, code, "Bu taş kodu zaten kayıtlı."));
+                    continue;
+                }
+
+                var type = typeCol > 0 ? row.Cell(typeCol).GetString().Trim() : string.Empty;
+                var origin = originCol > 0 ? row.Cell(originCol).GetString().Trim() : string.Empty;
+                var color = colorCol > 0 ? row.Cell(colorCol).GetString().Trim() : string.Empty;
+
+                var minimumStock = 0m;
+                if (minStockCol > 0 && !TryParseDecimalCell(row.Cell(minStockCol), out minimumStock))
+                {
+                    errors.Add(new StoneImportRowError(rowNumber, code, "Min Stok sayısal bir değer olmalıdır."));
+                    continue;
+                }
+
+                rows.Add((rowNumber, name, code, type, origin, color, minimumStock));
+            }
+        }
+        catch (Exception)
+        {
+            return BadRequest(new { message = "Excel dosyası okunamadı. Lütfen sağlanan şablonu kullanın." });
+        }
+
+        foreach (var r in rows)
+        {
+            var stone = new Stone
+            {
+                Name = r.Name,
+                Code = r.Code,
+                Type = r.Type,
+                Origin = r.Origin,
+                Color = r.Color,
+                MinimumStock = r.MinimumStock,
+                Status = StoneStatus.Aktif,
+                IsBelowMinimumStock = r.MinimumStock > 0,
+            };
+            _db.Stones.Add(stone);
+            AuditLogWriter.Log(_db, User, "Created", "Stone", stone.Code, $"{stone.Name} ({stone.Code})");
+        }
+
+        if (rows.Count > 0)
+        {
+            await _db.SaveChangesAsync(ct);
+        }
+
+        return Ok(new StoneImportResult(rows.Count, errors.Count, errors));
+    }
+
+    private static bool TryParseDecimalCell(IXLCell cell, out decimal value)
+    {
+        value = 0;
+        if (cell.IsEmpty())
+        {
+            return true;
+        }
+
+        if (cell.TryGetValue(out double numeric))
+        {
+            value = (decimal)numeric;
+            return true;
+        }
+
+        var text = cell.GetString().Trim();
+        if (string.IsNullOrEmpty(text))
+        {
+            return true;
+        }
+
+        return decimal.TryParse(text, NumberStyles.Any, CultureInfo.GetCultureInfo("tr-TR"), out value)
+            || decimal.TryParse(text, NumberStyles.Any, CultureInfo.InvariantCulture, out value);
     }
 
     [HttpPut("{id:int}")]

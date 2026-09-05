@@ -23,13 +23,17 @@ import {
   Typography,
 } from '@mui/material'
 import SearchIcon from '@mui/icons-material/SearchOutlined'
+import UploadFileIcon from '@mui/icons-material/UploadFileOutlined'
 import {
   createStone,
   deleteStone,
+  downloadStoneImportTemplate,
   fetchStones,
+  importStones,
   updateStone,
   uploadStoneImage,
   type Stone,
+  type StoneImportResult,
 } from '../../api/catalog'
 import { hasPermission, useCurrentUser } from '../../auth/useCurrentUser'
 import { ImageThumbnail } from '../../components/common/ImageThumbnail'
@@ -56,6 +60,14 @@ export function StonesPage() {
   const [createError, setCreateError] = useState<string | null>(null)
   const [createSubmitting, setCreateSubmitting] = useState(false)
   const createFileInputRef = useRef<HTMLInputElement>(null)
+
+  const [importOpen, setImportOpen] = useState(false)
+  const [importFile, setImportFile] = useState<File | null>(null)
+  const [importError, setImportError] = useState<string | null>(null)
+  const [importResult, setImportResult] = useState<StoneImportResult | null>(null)
+  const [importSubmitting, setImportSubmitting] = useState(false)
+  const [templateDownloading, setTemplateDownloading] = useState(false)
+  const importFileInputRef = useRef<HTMLInputElement>(null)
 
   const [editingStone, setEditingStone] = useState<Stone | null>(null)
   const [editForm, setEditForm] = useState<EditForm | null>(null)
@@ -132,6 +144,48 @@ export function StonesPage() {
     }
   }
 
+  const handleDownloadTemplate = async () => {
+    setTemplateDownloading(true)
+    try {
+      const blob = await downloadStoneImportTemplate()
+      const url = URL.createObjectURL(blob)
+      const link = document.createElement('a')
+      link.href = url
+      link.download = 'taslar-sablon.xlsx'
+      link.click()
+      URL.revokeObjectURL(url)
+    } finally {
+      setTemplateDownloading(false)
+    }
+  }
+
+  const closeImportDialog = () => {
+    setImportOpen(false)
+    setImportFile(null)
+    setImportError(null)
+    setImportResult(null)
+  }
+
+  const handleImportSubmit = async () => {
+    if (!importFile) return
+    setImportError(null)
+    setImportSubmitting(true)
+    try {
+      const result = await importStones(importFile)
+      setImportResult(result)
+      setImportFile(null)
+      if (importFileInputRef.current) importFileInputRef.current.value = ''
+      queryClient.invalidateQueries({ queryKey: ['stones'] })
+    } catch (err: unknown) {
+      const message =
+        (err as { response?: { data?: { message?: string } } })?.response?.data?.message ??
+        'Excel dosyası içe aktarılamadı.'
+      setImportError(message)
+    } finally {
+      setImportSubmitting(false)
+    }
+  }
+
   const openEdit = (stone: Stone) => {
     setEditingStone(stone)
     setEditForm({
@@ -180,9 +234,22 @@ export function StonesPage() {
           Taşlar
         </Typography>
         {canCreate && (
-          <Button variant="contained" onClick={() => setCreateOpen(true)}>
-            Taş Ekle
-          </Button>
+          <Stack direction="row" spacing={1}>
+            <Button
+              variant="outlined"
+              startIcon={<UploadFileIcon />}
+              onClick={() => {
+                setImportResult(null)
+                setImportError(null)
+                setImportOpen(true)
+              }}
+            >
+              Excel'den Aktar
+            </Button>
+            <Button variant="contained" onClick={() => setCreateOpen(true)}>
+              Taş Ekle
+            </Button>
+          </Stack>
         )}
       </Stack>
 
@@ -281,6 +348,85 @@ export function StonesPage() {
           </Typography>
         )}
       </Box>
+
+      <Dialog open={importOpen} onClose={closeImportDialog} maxWidth="sm" fullWidth>
+        <DialogTitle>Excel'den Taş Aktar</DialogTitle>
+        <DialogContent>
+          <Stack spacing={2} sx={{ mt: 1 }}>
+            <Typography variant="body2" color="text.secondary">
+              Önce şablonu indirip Taş Adı, Kod, Tip, Menşei, Renk ve Min Stok bilgilerini doldurun,
+              ardından dosyayı buradan yükleyin. Kod alanı zorunludur ve mevcut kodlarla
+              çakışmamalıdır.
+            </Typography>
+            <Button
+              variant="outlined"
+              size="small"
+              onClick={handleDownloadTemplate}
+              disabled={templateDownloading}
+              sx={{ alignSelf: 'flex-start' }}
+            >
+              Şablonu İndir
+            </Button>
+            <Stack direction="row" spacing={1.5} sx={{ alignItems: 'center' }}>
+              <Button variant="outlined" size="small" onClick={() => importFileInputRef.current?.click()}>
+                Dosya Seç
+              </Button>
+              <Typography variant="body2" color="text.secondary">
+                {importFile ? importFile.name : 'Dosya seçilmedi'}
+              </Typography>
+              <input
+                ref={importFileInputRef}
+                type="file"
+                accept=".xlsx"
+                hidden
+                onChange={(e) => {
+                  setImportResult(null)
+                  setImportError(null)
+                  setImportFile(e.target.files?.[0] ?? null)
+                }}
+              />
+            </Stack>
+            {importError && <Alert severity="error">{importError}</Alert>}
+            {importResult && (
+              <Alert severity={importResult.failed > 0 ? 'warning' : 'success'}>
+                {importResult.created} taş oluşturuldu, {importResult.failed} satır hatalı.
+              </Alert>
+            )}
+            {importResult && importResult.errors.length > 0 && (
+              <Box sx={{ maxHeight: 220, overflowY: 'auto' }}>
+                <Table size="small">
+                  <TableHead>
+                    <TableRow>
+                      <TableCell>Satır</TableCell>
+                      <TableCell>Kod</TableCell>
+                      <TableCell>Hata</TableCell>
+                    </TableRow>
+                  </TableHead>
+                  <TableBody>
+                    {importResult.errors.map((e, i) => (
+                      <TableRow key={i}>
+                        <TableCell>{e.row}</TableCell>
+                        <TableCell>{e.code ?? '-'}</TableCell>
+                        <TableCell>{e.message}</TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              </Box>
+            )}
+          </Stack>
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={closeImportDialog}>Kapat</Button>
+          <Button
+            variant="contained"
+            disabled={!importFile || importSubmitting}
+            onClick={handleImportSubmit}
+          >
+            Aktar
+          </Button>
+        </DialogActions>
+      </Dialog>
 
       <Dialog open={createOpen} onClose={() => setCreateOpen(false)} maxWidth="sm" fullWidth>
         <DialogTitle>Yeni Taş</DialogTitle>

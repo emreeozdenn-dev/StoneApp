@@ -302,7 +302,7 @@ export function PlatesPage() {
               <TableCell>QR</TableCell>
               <TableCell>Plaka No</TableCell>
               <TableCell>Taş</TableCell>
-              <TableCell>Parti Kodu</TableCell>
+              <TableCell>Parti/Lot Kodu</TableCell>
               <TableCell align="right">En x Boy (cm)</TableCell>
               <TableCell align="right">Alan (m²)</TableCell>
               <TableCell>Depo</TableCell>
@@ -441,7 +441,7 @@ export function PlatesPage() {
             </TextField>
             <TextField
               select
-              label="Gelen Stok / Parti"
+              label="Gelen Parti/Lot"
               value={form.incomingStockId}
               onChange={(e) => setForm((prev) => ({ ...prev, incomingStockId: String(e.target.value) }))}
               fullWidth
@@ -511,7 +511,7 @@ export function PlatesPage() {
           {editForm && (
             <Stack spacing={2} sx={{ mt: 1 }}>
               <TextField label="Taş" value={editingPlate?.stoneName ?? ''} fullWidth disabled />
-              <TextField label="Parti Kodu" value={editingPlate?.batchCode ?? ''} fullWidth disabled />
+              <TextField label="Parti/Lot Kodu" value={editingPlate?.batchCode ?? ''} fullWidth disabled />
               <TextField label="Plaka No" value={editForm.plateNo} onChange={handleEditChange('plateNo')} fullWidth />
               <Stack direction="row" spacing={2}>
                 <TextField

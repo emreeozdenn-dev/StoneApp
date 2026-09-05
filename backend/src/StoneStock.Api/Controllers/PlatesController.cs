@@ -98,7 +98,7 @@ public sealed class PlatesController : ControllerBase
             BatchCode = incomingStock.BatchCode,
             StoneId = request.StoneId,
             IncomingStockId = request.IncomingStockId,
-            // Doku ve kalınlık partiden (Gelen Stok) miras alınır; plaka bazında ayrıca girilmez/değiştirilmez.
+            // Doku ve kalınlık partiden (Gelen Parti/Lot) miras alınır; plaka bazında ayrıca girilmez/değiştirilmez.
             Texture = incomingStock.Texture,
             Thickness = incomingStock.Thickness,
             Width = request.Width,

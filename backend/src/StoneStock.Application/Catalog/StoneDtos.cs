@@ -28,3 +28,7 @@ public sealed record UpdateStoneRequest(
     string Color,
     decimal MinimumStock,
     string Status);
+
+public sealed record StoneImportRowError(int Row, string? Code, string Message);
+
+public sealed record StoneImportResult(int Created, int Failed, List<StoneImportRowError> Errors);

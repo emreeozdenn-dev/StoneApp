@@ -307,11 +307,11 @@ export function IncomingStockPage() {
     <Box>
       <Stack direction="row" sx={{ justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 1, mb: 3 }}>
         <Typography variant="h5" sx={{ fontWeight: 600 }}>
-          Gelen Stok
+          Gelen Parti/Lot
         </Typography>
         {canCreate && (
           <Button variant="contained" onClick={() => setDialogOpen(true)}>
-            Gelen Stok Ekle
+            Gelen Parti/Lot Ekle
           </Button>
         )}
       </Stack>
@@ -354,7 +354,7 @@ export function IncomingStockPage() {
         <Table sx={{ minWidth: 1080 }}>
           <TableHead>
             <TableRow>
-              <TableCell>Parti Kodu</TableCell>
+              <TableCell>Parti/Lot Kodu</TableCell>
               <TableCell>Taş</TableCell>
               <TableCell>Geliş Tarihi</TableCell>
               <TableCell>Tedarik Türü</TableCell>
@@ -425,11 +425,11 @@ export function IncomingStockPage() {
       </Box>
 
       <Dialog open={dialogOpen} onClose={() => setDialogOpen(false)} maxWidth="sm" fullWidth>
-        <DialogTitle>Yeni Gelen Stok</DialogTitle>
+        <DialogTitle>Yeni Gelen Parti/Lot</DialogTitle>
         <DialogContent>
           <Stack spacing={2} sx={{ mt: 1 }}>
             <Alert severity="info" variant="outlined">
-              Parti Kodu, sıradaki numaraya göre otomatik atanacak (örn. PB-{new Date().getFullYear()}-001).
+              Parti/Lot Kodu, sıradaki numaraya göre otomatik atanacak (örn. PB-{new Date().getFullYear()}-001).
             </Alert>
             <TextField
               select
@@ -597,11 +597,11 @@ export function IncomingStockPage() {
       </Dialog>
 
       <Dialog open={!!editingRow} onClose={() => setEditingRow(null)} maxWidth="sm" fullWidth>
-        <DialogTitle>Gelen Stok Kaydını Düzenle</DialogTitle>
+        <DialogTitle>Gelen Parti/Lot Kaydını Düzenle</DialogTitle>
         <DialogContent>
           {editForm && (
             <Stack spacing={2} sx={{ mt: 1 }}>
-              <TextField label="Parti Kodu" value={editingRow?.batchCode ?? ''} fullWidth disabled />
+              <TextField label="Parti/Lot Kodu" value={editingRow?.batchCode ?? ''} fullWidth disabled />
               <TextField label="Taş" value={editingRow?.stoneName ?? ''} fullWidth disabled />
               <TextField
                 label="Geliş Tarihi"
@@ -781,7 +781,7 @@ export function IncomingStockPage() {
       </Dialog>
 
       <Dialog open={!!deleteTarget} onClose={() => setDeleteTarget(null)} maxWidth="xs" fullWidth>
-        <DialogTitle>Gelen Stok Kaydını Sil</DialogTitle>
+        <DialogTitle>Gelen Parti/Lot Kaydını Sil</DialogTitle>
         <DialogContent>
           <Typography variant="body2" sx={{ mb: 2 }}>
             <strong>{deleteTarget?.batchCode}</strong> ({deleteTarget?.stoneName}) kalıcı olarak

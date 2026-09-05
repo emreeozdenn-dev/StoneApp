@@ -44,7 +44,7 @@ export function Sidebar({ permissions, onNavigate }: SidebarProps) {
         <NavItem to="/taslar" icon={<DiamondIcon />} label="Taşlar" onNavigate={onNavigate} />
       )}
       {hasPermission(permissions, 'incomingstock.view') && (
-        <NavItem to="/gelen-stok" icon={<Inventory2Icon />} label="Gelen Stok" onNavigate={onNavigate} />
+        <NavItem to="/gelen-stok" icon={<Inventory2Icon />} label="Gelen Parti/Lot" onNavigate={onNavigate} />
       )}
       {hasPermission(permissions, 'plates.view') && (
         <NavItem to="/plakalar" icon={<ViewModuleIcon />} label="Plakalar" onNavigate={onNavigate} />

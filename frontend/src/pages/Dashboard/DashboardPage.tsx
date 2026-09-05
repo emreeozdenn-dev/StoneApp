@@ -162,11 +162,11 @@ export function DashboardPage() {
         {canSeeIncoming && (
           <Paper variant="outlined" sx={{ p: 2.5, flex: 1, minWidth: 0 }}>
             <Typography variant="subtitle1" sx={{ fontWeight: 600, mb: 1.5 }}>
-              Son Gelen Stoklar
+              Son Gelen Parti/Lotlar
             </Typography>
             {recentIncoming.length === 0 ? (
               <Typography variant="body2" color="text.secondary">
-                Henüz gelen stok kaydı yok.
+                Henüz gelen parti/lot kaydı yok.
               </Typography>
             ) : (
               <Table size="small">

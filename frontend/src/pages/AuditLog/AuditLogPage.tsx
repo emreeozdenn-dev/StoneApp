@@ -39,7 +39,7 @@ const actionColor: Record<string, 'success' | 'default' | 'error' | 'warning'> =
 
 const recordTypeLabel: Record<string, string> = {
   Stone: 'Taş',
-  IncomingStock: 'Gelen Stok',
+  IncomingStock: 'Gelen Parti/Lot',
   Plate: 'Plaka',
   User: 'Kullanıcı',
   Role: 'Rol',

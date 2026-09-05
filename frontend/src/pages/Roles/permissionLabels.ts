@@ -8,10 +8,10 @@ export const PERMISSION_LABELS: Record<string, string> = {
   'stones.create': 'Taş Ekle',
   'stones.edit': 'Taş Düzenle',
   'stones.delete': 'Taş Sil',
-  'incomingstock.view': 'Gelen Stoğu Görüntüle',
-  'incomingstock.create': 'Gelen Stok Ekle',
-  'incomingstock.edit': 'Gelen Stok Düzenle',
-  'incomingstock.delete': 'Gelen Stok Sil',
+  'incomingstock.view': 'Gelen Parti/Lot Görüntüle',
+  'incomingstock.create': 'Gelen Parti/Lot Ekle',
+  'incomingstock.edit': 'Gelen Parti/Lot Düzenle',
+  'incomingstock.delete': 'Gelen Parti/Lot Sil',
   'plates.view': 'Plakaları Görüntüle',
   'plates.create': 'Plaka Ekle',
   'plates.edit': 'Plaka Düzenle',
@@ -30,7 +30,7 @@ export const PERMISSION_LABELS: Record<string, string> = {
 export const PERMISSION_GROUPS: PermissionGroup[] = [
   { title: 'Taşlar', keys: ['stones.view', 'stones.create', 'stones.edit', 'stones.delete'] },
   {
-    title: 'Gelen Stok',
+    title: 'Gelen Parti/Lot',
     keys: ['incomingstock.view', 'incomingstock.create', 'incomingstock.edit', 'incomingstock.delete'],
   },
   { title: 'Plakalar', keys: ['plates.view', 'plates.create', 'plates.edit', 'plates.delete'] },
