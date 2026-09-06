@@ -36,6 +36,7 @@ import {
   fetchStones,
   markPlateSold,
   reservePlate,
+  SUPPLY_TYPE_LABELS,
   unreservePlate,
   updatePlate,
   uploadPlateImage,
@@ -73,6 +74,7 @@ type PlateColumnKey =
   | 'area'
   | 'warehouse'
   | 'status'
+  | 'supplyType'
   | 'unitCost'
   | 'saleCost'
   | 'saleCostLive'
@@ -118,6 +120,14 @@ const statusColor: Record<Plate['status'], 'success' | 'warning' | 'default' | '
   Rezerve: 'warning',
   Satildi: 'default',
   Pasif: 'error',
+}
+
+const supplyTypeColor: Record<string, 'primary' | 'info' | 'success' | 'warning' | 'secondary'> = {
+  Ocak: 'primary',
+  Ithalat: 'info',
+  YerelTedarikci: 'success',
+  Konsinye: 'warning',
+  Diger: 'secondary',
 }
 
 function PlateInfoCard({
@@ -298,6 +308,7 @@ export function PlatesPage() {
       { key: 'area', label: 'Alan (m²)', align: 'right' },
       { key: 'warehouse', label: 'Depo' },
       { key: 'status', label: 'Durum' },
+      { key: 'supplyType', label: 'Tedarik Türü' },
     ]
     if (canSeeCost) cols.push({ key: 'unitCost', label: 'Birim Maliyet', align: 'right' })
     cols.push({ key: 'saleCost', label: 'Satış Maliyeti', align: 'right' })
@@ -344,6 +355,15 @@ export function PlatesPage() {
         return p.warehouse
       case 'status':
         return <Chip label={p.status} size="small" color={statusColor[p.status]} />
+      case 'supplyType':
+        return (
+          <Chip
+            label={SUPPLY_TYPE_LABELS[p.supplyType] ?? p.supplyType}
+            size="small"
+            color={supplyTypeColor[p.supplyType] ?? 'default'}
+            variant="outlined"
+          />
+        )
       case 'unitCost':
         return p.unitCost != null ? `${p.unitCost.toLocaleString('tr-TR')} ${p.costCurrency}` : '—'
       case 'saleCost':

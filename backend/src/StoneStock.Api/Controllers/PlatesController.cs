@@ -404,6 +404,7 @@ public sealed class PlatesController : ControllerBase
                 p.Thickness, p.Width, p.Height, p.Area, p.Warehouse, p.Status.ToString(),
                 saleCost, p.IncomingStock.SaleCurrency.ToString(), p.SaleAmount,
                 p.SoldAt, soldByName, p.QrToken, p.CreatedAt, p.ImageUrl, p.SaleAmountCurrency?.ToString(),
+                p.IncomingStock.SupplyType.ToString(),
                 p.IncomingStock.UnitCost, p.IncomingStock.CostCurrency.ToString(),
                 saleCostLiveRateTry, saleCostArrivalRateTry);
         }
@@ -412,6 +413,7 @@ public sealed class PlatesController : ControllerBase
             p.Id, p.PlateNo, p.BatchCode, p.StoneId, p.Stone.Name, p.IncomingStockId, p.BundleNumber, p.Texture,
             p.Thickness, p.Width, p.Height, p.Area, p.Warehouse, p.Status.ToString(),
             saleCost, p.IncomingStock.SaleCurrency.ToString(), p.SaleAmount,
-            p.SoldAt, soldByName, p.QrToken, p.CreatedAt, p.ImageUrl, p.SaleAmountCurrency?.ToString());
+            p.SoldAt, soldByName, p.QrToken, p.CreatedAt, p.ImageUrl, p.SaleAmountCurrency?.ToString(),
+            p.IncomingStock.SupplyType.ToString());
     }
 }

@@ -198,6 +198,7 @@ export interface Plate {
   qrToken: string
   createdAt: string
   imageUrl?: string | null
+  supplyType: string
   unitCost?: number
   costCurrency?: string
   saleCostLiveRateTry?: number | null

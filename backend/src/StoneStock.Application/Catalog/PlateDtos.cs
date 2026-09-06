@@ -23,7 +23,8 @@ public record PlateDto(
     string QrToken,
     DateTimeOffset CreatedAt,
     string? ImageUrl,
-    string? SaleAmountCurrency);
+    string? SaleAmountCurrency,
+    string SupplyType);
 
 public sealed record PlateAdminDto(
     int Id,
@@ -49,13 +50,14 @@ public sealed record PlateAdminDto(
     DateTimeOffset CreatedAt,
     string? ImageUrl,
     string? SaleAmountCurrency,
+    string SupplyType,
     decimal UnitCost,
     string CostCurrency,
     decimal? SaleCostLiveRateTry,
     decimal? SaleCostArrivalRateTry)
     : PlateDto(Id, PlateNo, BatchCode, StoneId, StoneName, IncomingStockId, BundleNumber, Texture, Thickness, Width, Height,
         Area, Warehouse, Status, SaleCost, SaleCurrency, SaleAmount, SoldAt, SoldByUserName, QrToken, CreatedAt, ImageUrl,
-        SaleAmountCurrency);
+        SaleAmountCurrency, SupplyType);
 
 public sealed record CreatePlateRequest(
     int StoneId,
