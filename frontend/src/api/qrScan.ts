@@ -6,6 +6,8 @@ export type QrScanResultStatus = 'Success' | 'NotFound' | 'Invalid'
 export interface QrScanResponse {
   result: QrScanResultStatus
   plate: Plate | null
+  stonePlateCount: number | null
+  stoneTotalAreaM2: number | null
 }
 
 export async function scanQrCode(rawValue: string): Promise<QrScanResponse> {

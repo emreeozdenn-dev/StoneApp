@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import QrScanner from 'qr-scanner'
-import { useMutation, useQuery } from '@tanstack/react-query'
+import { useMutation } from '@tanstack/react-query'
 import {
   Alert,
   Box,
@@ -15,24 +15,7 @@ import {
 } from '@mui/material'
 import { scanQrCode, type QrScanResponse } from '../../api/qrScan'
 import type { Plate } from '../../api/catalog'
-import { fetchExchangeRates } from '../../api/exchangeRates'
 import { ImageThumbnail } from '../../components/common/ImageThumbnail'
-import { hasPermission, useCurrentUser } from '../../auth/useCurrentUser'
-
-// TCMB döviz satış kuruyla, ilgili tutarı TL karşılığına çevirir. `multiplyByArea` ile birim
-// (m² başına) fiyatlar plakanın alanıyla çarpılıp toplam TL değeri hesaplanır.
-function tryEquivalent(
-  amount: number,
-  currency: string,
-  rates: { usdTry: number | null; eurTry: number | null } | undefined,
-  area?: number,
-): string | null {
-  if (currency === 'TRY' || !rates) return null
-  const rate = currency === 'USD' ? rates.usdTry : currency === 'EUR' ? rates.eurTry : null
-  if (!rate) return null
-  const total = area != null ? amount * area * rate : amount * rate
-  return `≈ ${total.toLocaleString('tr-TR', { maximumFractionDigits: 0 })} TRY`
-}
 
 const statusColor: Record<Plate['status'], 'success' | 'warning' | 'default' | 'error'> = {
   Aktif: 'success',
@@ -42,18 +25,6 @@ const statusColor: Record<Plate['status'], 'success' | 'warning' | 'default' | '
 }
 
 export function QrScanPage() {
-  const { user } = useCurrentUser()
-  const canSeeCost =
-    hasPermission(user?.permissions, 'cost.unit.view') &&
-    hasPermission(user?.permissions, 'cost.currency.view')
-
-  const ratesQuery = useQuery({
-    queryKey: ['exchange-rates'],
-    queryFn: fetchExchangeRates,
-    staleTime: 30 * 60_000,
-  })
-  const rates = ratesQuery.data ?? undefined
-
   const videoRef = useRef<HTMLVideoElement>(null)
   const scannerRef = useRef<QrScanner | null>(null)
   const processingRef = useRef(false)
@@ -232,35 +203,13 @@ export function QrScanPage() {
                 <Row label="Doku" value={plate.texture} />
                 <Row label="Kalınlık" value={`${plate.thickness} cm`} />
                 <Row label="Depo" value={plate.warehouse} />
-                {canSeeCost && plate.unitCost != null && (
-                  <Row
-                    label="Birim Maliyet"
-                    value={`${plate.unitCost.toLocaleString('tr-TR')} ${plate.costCurrency}`}
-                    hint={tryEquivalent(plate.unitCost, plate.costCurrency ?? 'TRY', rates, plate.area)}
-                  />
+                {response?.stonePlateCount != null && (
+                  <Row label="Bu Taştan Kalan Plaka" value={`${response.stonePlateCount} adet`} />
                 )}
-                {plate.saleCost != null && (
-                  <Row
-                    label="Satış Maliyeti"
-                    value={`${plate.saleCost.toLocaleString('tr-TR')} ${plate.saleCurrency}`}
-                    hint={tryEquivalent(plate.saleCost, plate.saleCurrency, rates, plate.area)}
-                  />
-                )}
-                {plate.saleAmount != null && (
-                  <Row
-                    label="Satış Tutarı"
-                    value={`${plate.saleAmount.toLocaleString('tr-TR')} ${plate.saleCurrency}`}
-                    hint={tryEquivalent(plate.saleAmount, plate.saleCurrency, rates)}
-                  />
+                {response?.stoneTotalAreaM2 != null && (
+                  <Row label="Bu Taştan Kalan Toplam Alan" value={`${response.stoneTotalAreaM2.toLocaleString('tr-TR')} m²`} />
                 )}
               </Stack>
-
-              {rates && (rates.usdTry || rates.eurTry) && (
-                <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mt: 1.5 }}>
-                  TCMB döviz satış kuru ({rates.date}): 1 USD ≈ {rates.usdTry?.toLocaleString('tr-TR')} TRY, 1 EUR ≈{' '}
-                  {rates.eurTry?.toLocaleString('tr-TR')} TRY
-                </Typography>
-              )}
 
               <Button variant="contained" sx={{ mt: 3 }} onClick={resumeScanning}>
                 Tekrar Tara

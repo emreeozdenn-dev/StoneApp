@@ -66,12 +66,24 @@ public sealed class QrScanController : ControllerBase
 
         if (plate is null)
         {
-            return Ok(new QrScanResponse(result.ToString(), null));
+            return Ok(new QrScanResponse(result.ToString(), null, null, null));
         }
 
         var rates = await _exchangeRateService.GetRatesAsync(ct);
         var arrivalRates = await _exchangeRateService.GetRatesForDateAsync(plate.IncomingStock.ArrivalDate, ct);
-        return Ok(new QrScanResponse(result.ToString(), PlatesController.Map(plate, HasCostPermission(), rates, arrivalRates)));
+
+        var stonePlateCount = await _db.Plates
+            .Where(p => p.StoneId == plate.StoneId && p.Status == PlateStatus.Aktif)
+            .CountAsync(ct);
+        var stoneTotalAreaM2 = await _db.Plates
+            .Where(p => p.StoneId == plate.StoneId && p.Status == PlateStatus.Aktif)
+            .SumAsync(p => (decimal?)p.Area, ct) ?? 0;
+
+        return Ok(new QrScanResponse(
+            result.ToString(),
+            PlatesController.Map(plate, HasCostPermission(), rates, arrivalRates),
+            stonePlateCount,
+            stoneTotalAreaM2));
     }
 
     [HttpGet("history")]
