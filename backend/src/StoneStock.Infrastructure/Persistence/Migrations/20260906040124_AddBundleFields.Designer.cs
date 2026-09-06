@@ -2,6 +2,7 @@
 using System;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 using StoneStock.Infrastructure.Persistence;
@@ -11,9 +12,11 @@ using StoneStock.Infrastructure.Persistence;
 namespace StoneStock.Infrastructure.Persistence.Migrations
 {
     [DbContext(typeof(AppDbContext))]
-    partial class AppDbContextModelSnapshot : ModelSnapshot
+    [Migration("20260906040124_AddBundleFields")]
+    partial class AddBundleFields
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder
@@ -288,125 +291,6 @@ namespace StoneStock.Infrastructure.Persistence.Migrations
                     b.ToTable("NotificationRecipients");
                 });
 
-            modelBuilder.Entity("StoneStock.Domain.Entities.Offer", b =>
-                {
-                    b.Property<int>("Id")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("integer");
-
-                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
-
-                    b.Property<string>("CompanyAddress")
-                        .HasColumnType("text");
-
-                    b.Property<string>("CompanyName")
-                        .IsRequired()
-                        .HasColumnType("text");
-
-                    b.Property<DateTimeOffset>("CreatedAt")
-                        .HasColumnType("timestamp with time zone");
-
-                    b.Property<int>("CreatedByUserId")
-                        .HasColumnType("integer");
-
-                    b.Property<string>("Currency")
-                        .IsRequired()
-                        .HasColumnType("text");
-
-                    b.Property<string>("DeliveryAddress")
-                        .HasColumnType("text");
-
-                    b.Property<string>("DeliveryMethod")
-                        .HasColumnType("text");
-
-                    b.Property<bool>("IsSold")
-                        .HasColumnType("boolean");
-
-                    b.Property<DateOnly>("OfferDate")
-                        .HasColumnType("date");
-
-                    b.Property<bool>("ShippingIncluded")
-                        .HasColumnType("boolean");
-
-                    b.Property<DateTimeOffset?>("SoldAt")
-                        .HasColumnType("timestamp with time zone");
-
-                    b.Property<decimal>("TotalAmount")
-                        .HasColumnType("numeric(14,2)");
-
-                    b.Property<decimal?>("UsdRate")
-                        .HasColumnType("numeric(14,4)");
-
-                    b.Property<int>("ValidityDays")
-                        .HasColumnType("integer");
-
-                    b.Property<bool>("VatIncluded")
-                        .HasColumnType("boolean");
-
-                    b.HasKey("Id");
-
-                    b.HasIndex("CreatedByUserId");
-
-                    b.ToTable("Offers");
-                });
-
-            modelBuilder.Entity("StoneStock.Domain.Entities.OfferItem", b =>
-                {
-                    b.Property<int>("Id")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("integer");
-
-                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
-
-                    b.Property<decimal>("AreaM2")
-                        .HasColumnType("numeric(12,4)");
-
-                    b.Property<decimal>("HeightCm")
-                        .HasColumnType("numeric(8,2)");
-
-                    b.Property<decimal>("LineTotal")
-                        .HasColumnType("numeric(14,2)");
-
-                    b.Property<int>("OfferId")
-                        .HasColumnType("integer");
-
-                    b.Property<int?>("PlateId")
-                        .HasColumnType("integer");
-
-                    b.Property<string>("PlateIds")
-                        .HasColumnType("text");
-
-                    b.Property<string>("PlateNo")
-                        .IsRequired()
-                        .HasColumnType("text");
-
-                    b.Property<int>("Quantity")
-                        .HasColumnType("integer");
-
-                    b.Property<string>("StoneName")
-                        .IsRequired()
-                        .HasColumnType("text");
-
-                    b.Property<string>("Texture")
-                        .IsRequired()
-                        .HasColumnType("text");
-
-                    b.Property<decimal>("ThicknessCm")
-                        .HasColumnType("numeric(8,2)");
-
-                    b.Property<decimal>("UnitPrice")
-                        .HasColumnType("numeric(14,2)");
-
-                    b.Property<decimal>("WidthCm")
-                        .HasColumnType("numeric(8,2)");
-
-                    b.HasKey("Id");
-
-                    b.HasIndex("OfferId");
-
-                    b.ToTable("OfferItems");
-                });
-
             modelBuilder.Entity("StoneStock.Domain.Entities.Permission", b =>
                 {
                     b.Property<int>("Id")
@@ -556,24 +440,6 @@ namespace StoneStock.Infrastructure.Persistence.Migrations
                             Id = 21,
                             Description = "plates.delete",
                             Key = "plates.delete"
-                        },
-                        new
-                        {
-                            Id = 22,
-                            Description = "offers.view",
-                            Key = "offers.view"
-                        },
-                        new
-                        {
-                            Id = 23,
-                            Description = "offers.create",
-                            Key = "offers.create"
-                        },
-                        new
-                        {
-                            Id = 24,
-                            Description = "offers.delete",
-                            Key = "offers.delete"
                         });
                 });
 
@@ -620,9 +486,6 @@ namespace StoneStock.Infrastructure.Persistence.Migrations
 
                     b.Property<decimal?>("SaleAmount")
                         .HasColumnType("numeric(14,2)");
-
-                    b.Property<string>("SaleAmountCurrency")
-                        .HasColumnType("text");
 
                     b.Property<DateTimeOffset?>("SoldAt")
                         .HasColumnType("timestamp with time zone");
@@ -867,21 +730,6 @@ namespace StoneStock.Infrastructure.Persistence.Migrations
                         },
                         new
                         {
-                            RoleId = 1,
-                            PermissionId = 22
-                        },
-                        new
-                        {
-                            RoleId = 1,
-                            PermissionId = 23
-                        },
-                        new
-                        {
-                            RoleId = 1,
-                            PermissionId = 24
-                        },
-                        new
-                        {
                             RoleId = 2,
                             PermissionId = 1
                         },
@@ -937,16 +785,6 @@ namespace StoneStock.Infrastructure.Persistence.Migrations
                         },
                         new
                         {
-                            RoleId = 2,
-                            PermissionId = 22
-                        },
-                        new
-                        {
-                            RoleId = 2,
-                            PermissionId = 23
-                        },
-                        new
-                        {
                             RoleId = 3,
                             PermissionId = 1
                         },
@@ -969,11 +807,6 @@ namespace StoneStock.Infrastructure.Persistence.Migrations
                         {
                             RoleId = 3,
                             PermissionId = 15
-                        },
-                        new
-                        {
-                            RoleId = 3,
-                            PermissionId = 22
                         });
                 });
 
@@ -1295,28 +1128,6 @@ namespace StoneStock.Infrastructure.Persistence.Migrations
                     b.Navigation("Stone");
                 });
 
-            modelBuilder.Entity("StoneStock.Domain.Entities.Offer", b =>
-                {
-                    b.HasOne("StoneStock.Domain.Entities.User", "CreatedByUser")
-                        .WithMany()
-                        .HasForeignKey("CreatedByUserId")
-                        .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired();
-
-                    b.Navigation("CreatedByUser");
-                });
-
-            modelBuilder.Entity("StoneStock.Domain.Entities.OfferItem", b =>
-                {
-                    b.HasOne("StoneStock.Domain.Entities.Offer", "Offer")
-                        .WithMany("Items")
-                        .HasForeignKey("OfferId")
-                        .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired();
-
-                    b.Navigation("Offer");
-                });
-
             modelBuilder.Entity("StoneStock.Domain.Entities.Plate", b =>
                 {
                     b.HasOne("StoneStock.Domain.Entities.IncomingStock", "IncomingStock")
@@ -1392,11 +1203,6 @@ namespace StoneStock.Infrastructure.Persistence.Migrations
             modelBuilder.Entity("StoneStock.Domain.Entities.IncomingStock", b =>
                 {
                     b.Navigation("Plates");
-                });
-
-            modelBuilder.Entity("StoneStock.Domain.Entities.Offer", b =>
-                {
-                    b.Navigation("Items");
                 });
 
             modelBuilder.Entity("StoneStock.Domain.Entities.Permission", b =>

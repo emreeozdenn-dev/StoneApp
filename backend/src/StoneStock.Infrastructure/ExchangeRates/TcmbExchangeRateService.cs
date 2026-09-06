@@ -10,6 +10,7 @@ public sealed class TcmbExchangeRateService : IExchangeRateService
 {
     private const string CacheKey = "tcmb-exchange-rates";
     private const string FeedUrl = "https://www.tcmb.gov.tr/kurlar/today.xml";
+    private const int MaxLookbackDays = 10;
 
     private readonly HttpClient _httpClient;
     private readonly IMemoryCache _cache;
@@ -47,6 +48,48 @@ public sealed class TcmbExchangeRateService : IExchangeRateService
             _logger.LogWarning(ex, "TCMB döviz kuru alınamadı");
             return null;
         }
+    }
+
+    public async Task<ExchangeRatesResult?> GetRatesForDateAsync(DateOnly date, CancellationToken ct)
+    {
+        // Gelecek bir tarih istenmişse günün kurunu döndür (geçerli bir TCMB kuru yayınlanmamıştır).
+        if (date > DateOnly.FromDateTime(DateTime.UtcNow))
+        {
+            return await GetRatesAsync(ct);
+        }
+
+        var cacheKey = $"tcmb-exchange-rates-{date:yyyy-MM-dd}";
+        if (_cache.TryGetValue(cacheKey, out ExchangeRatesResult? cached) && cached is not null)
+        {
+            return cached;
+        }
+
+        for (var attempt = 0; attempt <= MaxLookbackDays; attempt++)
+        {
+            var candidate = date.AddDays(-attempt);
+            var url = $"https://www.tcmb.gov.tr/kurlar/{candidate:yyyyMM}/{candidate:ddMMyyyy}.xml";
+
+            try
+            {
+                var xml = await _httpClient.GetStringAsync(url, ct);
+                var doc = XDocument.Parse(xml);
+                var resolvedDate = doc.Root?.Attribute("Date")?.Value
+                    ?? doc.Root?.Attribute("Tarih")?.Value
+                    ?? candidate.ToString("dd.MM.yyyy", CultureInfo.InvariantCulture);
+
+                var result = new ExchangeRatesResult(resolvedDate, ReadRate(doc, "USD"), ReadRate(doc, "EUR"));
+                // Geçmiş tarihli kurlar değişmez; uzun süre önbelleğe alınabilir.
+                _cache.Set(cacheKey, result, TimeSpan.FromDays(30));
+                return result;
+            }
+            catch (Exception)
+            {
+                // TCMB hafta sonu/tatil günlerinde kur yayınlamaz; bir önceki güne bakılır.
+            }
+        }
+
+        _logger.LogWarning("TCMB {Date} tarihli kur bulunamadı ({Lookback} gün geriye gidildi)", date, MaxLookbackDays);
+        return null;
     }
 
     private static decimal? ReadRate(XDocument doc, string code)

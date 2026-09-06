@@ -5,5 +5,6 @@ public enum SupplyType
     Ocak,
     Ithalat,
     YerelTedarikci,
+    Konsinye,
     Diger,
 }

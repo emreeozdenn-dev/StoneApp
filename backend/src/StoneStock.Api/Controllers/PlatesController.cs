@@ -55,7 +55,8 @@ public sealed class PlatesController : ControllerBase
             .ToListAsync(ct);
 
         var rates = await _exchangeRateService.GetRatesAsync(ct);
-        return Ok(plates.Select(p => Map(p, canSeeCost, rates)).ToList());
+        var arrivalRatesByDate = await GetArrivalRatesByDateAsync(plates.Select(p => p.IncomingStock.ArrivalDate), ct);
+        return Ok(plates.Select(p => Map(p, canSeeCost, rates, arrivalRatesByDate[p.IncomingStock.ArrivalDate])).ToList());
     }
 
     [HttpGet("{id:int}")]
@@ -76,7 +77,19 @@ public sealed class PlatesController : ControllerBase
         }
 
         var rates = await _exchangeRateService.GetRatesAsync(ct);
-        return Ok(Map(plate, canSeeCost, rates));
+        var arrivalRates = await _exchangeRateService.GetRatesForDateAsync(plate.IncomingStock.ArrivalDate, ct);
+        return Ok(Map(plate, canSeeCost, rates, arrivalRates));
+    }
+
+    private async Task<Dictionary<DateOnly, ExchangeRatesResult?>> GetArrivalRatesByDateAsync(
+        IEnumerable<DateOnly> arrivalDates, CancellationToken ct)
+    {
+        var result = new Dictionary<DateOnly, ExchangeRatesResult?>();
+        foreach (var date in arrivalDates.Distinct())
+        {
+            result[date] = await _exchangeRateService.GetRatesForDateAsync(date, ct);
+        }
+        return result;
     }
 
     [HttpPost]
@@ -90,6 +103,14 @@ public sealed class PlatesController : ControllerBase
             return BadRequest(new { message = "Geçersiz gelen stok / taş eşleşmesi." });
         }
 
+        if (incomingStock.BundleCount > 0)
+        {
+            if (request.BundleNumber is null || request.BundleNumber < 1 || request.BundleNumber > incomingStock.BundleCount)
+            {
+                return BadRequest(new { message = "Geçerli bir Bundle Seçimi yapmalısınız." });
+            }
+        }
+
         var plateNo = await GenerateNextPlateNoAsync(request.StoneId, incomingStock.Stone.Code, ct);
 
         var plate = new Plate
@@ -98,6 +119,7 @@ public sealed class PlatesController : ControllerBase
             BatchCode = incomingStock.BatchCode,
             StoneId = request.StoneId,
             IncomingStockId = request.IncomingStockId,
+            BundleNumber = incomingStock.BundleCount > 0 ? request.BundleNumber : null,
             // Doku ve kalınlık partiden (Gelen Parti/Lot) miras alınır; plaka bazında ayrıca girilmez/değiştirilmez.
             Texture = incomingStock.Texture,
             Thickness = incomingStock.Thickness,
@@ -142,10 +164,19 @@ public sealed class PlatesController : ControllerBase
             return Conflict(new { message = "Bu plaka no zaten kayıtlı." });
         }
 
+        if (plate.IncomingStock.BundleCount > 0)
+        {
+            if (request.BundleNumber is null || request.BundleNumber < 1 || request.BundleNumber > plate.IncomingStock.BundleCount)
+            {
+                return BadRequest(new { message = "Geçerli bir Bundle Seçimi yapmalısınız." });
+            }
+        }
+
         var oldArea = plate.Area;
         var newArea = request.Width * request.Height;
 
         plate.PlateNo = request.PlateNo;
+        plate.BundleNumber = plate.IncomingStock.BundleCount > 0 ? request.BundleNumber : null;
         // Doku ve kalınlık partiden miras alınır; burada değiştirilmez.
         plate.Width = request.Width;
         plate.Height = request.Height;
@@ -234,6 +265,9 @@ public sealed class PlatesController : ControllerBase
 
         plate.Status = PlateStatus.Satildi;
         plate.SaleAmount = request.SaleAmount;
+        plate.SaleAmountCurrency = !string.IsNullOrWhiteSpace(request.SaleCurrency)
+            ? Enum.Parse<Currency>(request.SaleCurrency)
+            : null;
         plate.SoldAt = DateTimeOffset.UtcNow;
         plate.SoldByUserId = userId;
 
@@ -356,24 +390,28 @@ public sealed class PlatesController : ControllerBase
         User.HasClaim("permission", PermissionKeys.CostUnitView) &&
         User.HasClaim("permission", PermissionKeys.CostCurrencyView);
 
-    internal static object Map(Plate p, bool canSeeCost, ExchangeRatesResult? rates)
+    internal static object Map(Plate p, bool canSeeCost, ExchangeRatesResult? rates, ExchangeRatesResult? arrivalRates)
     {
         var soldByName = p.SoldByUser is null ? null : $"{p.SoldByUser.FirstName} {p.SoldByUser.LastName}";
         var saleCost = SaleCostCalculator.Compute(p.IncomingStock, rates);
 
         if (canSeeCost)
         {
+            var saleCostLiveRateTry = SaleCostCalculator.ComputeInTry(p.IncomingStock, rates);
+            var saleCostArrivalRateTry = SaleCostCalculator.ComputeInTry(p.IncomingStock, arrivalRates);
             return new PlateAdminDto(
-                p.Id, p.PlateNo, p.BatchCode, p.StoneId, p.Stone.Name, p.IncomingStockId, p.Texture,
+                p.Id, p.PlateNo, p.BatchCode, p.StoneId, p.Stone.Name, p.IncomingStockId, p.BundleNumber, p.Texture,
                 p.Thickness, p.Width, p.Height, p.Area, p.Warehouse, p.Status.ToString(),
                 saleCost, p.IncomingStock.SaleCurrency.ToString(), p.SaleAmount,
-                p.SoldAt, soldByName, p.QrToken, p.CreatedAt, p.ImageUrl, p.IncomingStock.UnitCost, p.IncomingStock.CostCurrency.ToString());
+                p.SoldAt, soldByName, p.QrToken, p.CreatedAt, p.ImageUrl, p.SaleAmountCurrency?.ToString(),
+                p.IncomingStock.UnitCost, p.IncomingStock.CostCurrency.ToString(),
+                saleCostLiveRateTry, saleCostArrivalRateTry);
         }
 
         return new PlateDto(
-            p.Id, p.PlateNo, p.BatchCode, p.StoneId, p.Stone.Name, p.IncomingStockId, p.Texture,
+            p.Id, p.PlateNo, p.BatchCode, p.StoneId, p.Stone.Name, p.IncomingStockId, p.BundleNumber, p.Texture,
             p.Thickness, p.Width, p.Height, p.Area, p.Warehouse, p.Status.ToString(),
             saleCost, p.IncomingStock.SaleCurrency.ToString(), p.SaleAmount,
-            p.SoldAt, soldByName, p.QrToken, p.CreatedAt, p.ImageUrl);
+            p.SoldAt, soldByName, p.QrToken, p.CreatedAt, p.ImageUrl, p.SaleAmountCurrency?.ToString());
     }
 }

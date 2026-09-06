@@ -23,6 +23,9 @@ public static class PermissionKeys
     public const string StonesDelete = "stones.delete";
     public const string IncomingStockDelete = "incomingstock.delete";
     public const string PlatesDelete = "plates.delete";
+    public const string OffersView = "offers.view";
+    public const string OffersCreate = "offers.create";
+    public const string OffersDelete = "offers.delete";
 
     public static readonly string[] All =
     {
@@ -35,6 +38,7 @@ public static class PermissionKeys
         // Yeni izinler mevcut ID eşlemesini bozmamak için sona eklenir.
         IncomingStockEdit,
         StonesDelete, IncomingStockDelete, PlatesDelete,
+        OffersView, OffersCreate, OffersDelete,
     };
 }
 

@@ -36,15 +36,59 @@ import {
   type StoneImportResult,
 } from '../../api/catalog'
 import { hasPermission, useCurrentUser } from '../../auth/useCurrentUser'
+import { ColorField } from '../../components/common/ColorField'
+import { ColumnSettingsButton } from '../../components/common/ColumnSettingsButton'
 import { ImageThumbnail } from '../../components/common/ImageThumbnail'
+import { OriginField } from '../../components/common/OriginField'
+import { type ColumnDef, useColumnPreferences } from '../../components/common/useColumnPreferences'
+import { useDraggableColumns } from '../../components/common/useDraggableColumns'
 
-const initialCreateForm = { name: '', code: '', type: '', origin: '', color: '', minimumStock: '' }
+type StoneColumnKey =
+  | 'image'
+  | 'name'
+  | 'code'
+  | 'type'
+  | 'origin'
+  | 'color'
+  | 'currentStock'
+  | 'minimumStock'
+  | 'status'
+
+const STONE_COLUMNS: ColumnDef<StoneColumnKey>[] = [
+  { key: 'image', label: 'Görsel' },
+  { key: 'name', label: 'Taş Adı' },
+  { key: 'code', label: 'Kod' },
+  { key: 'type', label: 'Tip' },
+  { key: 'origin', label: 'Menşei' },
+  { key: 'color', label: 'Renk' },
+  { key: 'currentStock', label: 'Mevcut Stok (m²)', align: 'right' },
+  { key: 'minimumStock', label: 'Min. Stok (m²)', align: 'right' },
+  { key: 'status', label: 'Durum' },
+]
+
+const initialCreateForm: CreateForm = { name: '', code: '', type: '', origin: '', color: [], minimumStock: '' }
+
+function parseColors(color: string): string[] {
+  return color
+    .split(',')
+    .map((c) => c.trim())
+    .filter((c) => c.length > 0)
+}
+
+interface CreateForm {
+  name: string
+  code: string
+  type: string
+  origin: string
+  color: string[]
+  minimumStock: string
+}
 
 interface EditForm {
   name: string
   type: string
   origin: string
-  color: string
+  color: string[]
   minimumStock: string
   status: 'Aktif' | 'Pasif'
 }
@@ -80,6 +124,39 @@ export function StonesPage() {
   const canEdit = hasPermission(user?.permissions, 'stones.edit')
   const canDelete = hasPermission(user?.permissions, 'stones.delete')
 
+  const columnPrefs = useColumnPreferences('stones', STONE_COLUMNS)
+  const draggableColumns = useDraggableColumns(columnPrefs.reorderTo)
+
+  function renderStoneCell(key: StoneColumnKey, s: Stone) {
+    switch (key) {
+      case 'image':
+        return <ImageThumbnail src={s.imageUrl} alt={s.name} />
+      case 'name':
+        return s.name
+      case 'code':
+        return s.code
+      case 'type':
+        return s.type
+      case 'origin':
+        return s.origin
+      case 'color':
+        return s.color
+      case 'currentStock':
+        return s.currentStock.toLocaleString('tr-TR')
+      case 'minimumStock':
+        return s.minimumStock.toLocaleString('tr-TR')
+      case 'status':
+        return (
+          <Stack direction="row" spacing={0.5}>
+            <Chip label={s.status} size="small" color={s.status === 'Aktif' ? 'success' : 'default'} />
+            {s.isBelowMinimumStock && <Chip label="Düşük Stok" size="small" color="warning" />}
+          </Stack>
+        )
+      default:
+        return null
+    }
+  }
+
   const [search, setSearch] = useState('')
   const [onlyLowStock, setOnlyLowStock] = useState(false)
   const filteredStones = useMemo(() => {
@@ -94,7 +171,11 @@ export function StonesPage() {
   const createMutation = useMutation({ mutationFn: createStone })
   const updateMutation = useMutation({
     mutationFn: ({ id, payload }: { id: number; payload: EditForm }) =>
-      updateStone(id, { ...payload, minimumStock: Number(payload.minimumStock) || 0 }),
+      updateStone(id, {
+        ...payload,
+        color: payload.color.join(', '),
+        minimumStock: Number(payload.minimumStock) || 0,
+      }),
   })
   const uploadMutation = useMutation({ mutationFn: ({ id, file }: { id: number; file: File }) => uploadStoneImage(id, file) })
 
@@ -115,9 +196,10 @@ export function StonesPage() {
     },
   })
 
-  const handleCreateChange = (field: keyof typeof createForm) => (e: React.ChangeEvent<HTMLInputElement>) => {
-    setCreateForm((prev) => ({ ...prev, [field]: e.target.value }))
-  }
+  const handleCreateChange =
+    (field: Exclude<keyof CreateForm, 'color' | 'origin'>) => (e: React.ChangeEvent<HTMLInputElement>) => {
+      setCreateForm((prev) => ({ ...prev, [field]: e.target.value }))
+    }
 
   const handleCreateSubmit = async () => {
     setCreateError(null)
@@ -125,6 +207,7 @@ export function StonesPage() {
     try {
       const { id } = await createMutation.mutateAsync({
         ...createForm,
+        color: createForm.color.join(', '),
         minimumStock: Number(createForm.minimumStock) || 0,
       })
       if (createImage) {
@@ -192,7 +275,7 @@ export function StonesPage() {
       name: stone.name,
       type: stone.type,
       origin: stone.origin,
-      color: stone.color,
+      color: parseColors(stone.color),
       minimumStock: String(stone.minimumStock),
       status: stone.status,
     })
@@ -200,9 +283,10 @@ export function StonesPage() {
     setEditError(null)
   }
 
-  const handleEditChange = (field: keyof EditForm) => (e: React.ChangeEvent<HTMLInputElement>) => {
-    setEditForm((prev) => (prev ? { ...prev, [field]: e.target.value } : prev))
-  }
+  const handleEditChange =
+    (field: Exclude<keyof EditForm, 'color' | 'status'>) => (e: React.ChangeEvent<HTMLInputElement>) => {
+      setEditForm((prev) => (prev ? { ...prev, [field]: e.target.value } : prev))
+    }
 
   const handleEditSubmit = async () => {
     if (!editingStone || !editForm) return
@@ -274,47 +358,35 @@ export function StonesPage() {
           control={<Switch checked={onlyLowStock} onChange={(e) => setOnlyLowStock(e.target.checked)} />}
           label="Sadece Düşük Stok"
         />
+        <ColumnSettingsButton columns={STONE_COLUMNS} prefs={columnPrefs} />
       </Stack>
 
       <Box sx={{ overflowX: 'auto' }}>
         <Table sx={{ minWidth: 920 }}>
           <TableHead>
             <TableRow>
-              <TableCell>Görsel</TableCell>
-              <TableCell>Taş Adı</TableCell>
-              <TableCell>Kod</TableCell>
-              <TableCell>Tip</TableCell>
-              <TableCell>Menşei</TableCell>
-              <TableCell>Renk</TableCell>
-              <TableCell align="right">Mevcut Stok (m²)</TableCell>
-              <TableCell align="right">Min. Stok (m²)</TableCell>
-              <TableCell>Durum</TableCell>
+              {columnPrefs.visibleOrderedKeys.map((key) => {
+                const col = STONE_COLUMNS.find((c) => c.key === key)
+                return (
+                  <TableCell key={key} align={col?.align} {...draggableColumns.getHeaderCellProps(key)}>
+                    {col?.label}
+                  </TableCell>
+                )
+              })}
               {(canEdit || canDelete) && <TableCell>İşlem</TableCell>}
             </TableRow>
           </TableHead>
           <TableBody>
             {filteredStones.map((s) => (
               <TableRow key={s.id}>
-                <TableCell>
-                  <ImageThumbnail src={s.imageUrl} alt={s.name} />
-                </TableCell>
-                <TableCell>{s.name}</TableCell>
-                <TableCell>{s.code}</TableCell>
-                <TableCell>{s.type}</TableCell>
-                <TableCell>{s.origin}</TableCell>
-                <TableCell>{s.color}</TableCell>
-                <TableCell align="right">{s.currentStock.toLocaleString('tr-TR')}</TableCell>
-                <TableCell align="right">{s.minimumStock.toLocaleString('tr-TR')}</TableCell>
-                <TableCell>
-                  <Stack direction="row" spacing={0.5}>
-                    <Chip
-                      label={s.status}
-                      size="small"
-                      color={s.status === 'Aktif' ? 'success' : 'default'}
-                    />
-                    {s.isBelowMinimumStock && <Chip label="Düşük Stok" size="small" color="warning" />}
-                  </Stack>
-                </TableCell>
+                {columnPrefs.visibleOrderedKeys.map((key) => {
+                  const col = STONE_COLUMNS.find((c) => c.key === key)
+                  return (
+                    <TableCell key={key} align={col?.align}>
+                      {renderStoneCell(key, s)}
+                    </TableCell>
+                  )
+                })}
                 {(canEdit || canDelete) && (
                   <TableCell>
                     <Stack direction="row" spacing={1}>
@@ -435,8 +507,14 @@ export function StonesPage() {
             <TextField label="Taş Adı" value={createForm.name} onChange={handleCreateChange('name')} fullWidth />
             <TextField label="Taş Kodu" value={createForm.code} onChange={handleCreateChange('code')} fullWidth />
             <TextField label="Tip" value={createForm.type} onChange={handleCreateChange('type')} fullWidth />
-            <TextField label="Menşei" value={createForm.origin} onChange={handleCreateChange('origin')} fullWidth />
-            <TextField label="Renk" value={createForm.color} onChange={handleCreateChange('color')} fullWidth />
+            <OriginField
+              value={createForm.origin}
+              onChange={(origin) => setCreateForm((prev) => ({ ...prev, origin }))}
+            />
+            <ColorField
+              value={createForm.color}
+              onChange={(color) => setCreateForm((prev) => ({ ...prev, color }))}
+            />
             <TextField
               label="Minimum Stok (m²)"
               value={createForm.minimumStock}
@@ -479,8 +557,14 @@ export function StonesPage() {
               <TextField label="Taş Kodu" value={editingStone?.code ?? ''} fullWidth disabled />
               <TextField label="Taş Adı" value={editForm.name} onChange={handleEditChange('name')} fullWidth />
               <TextField label="Tip" value={editForm.type} onChange={handleEditChange('type')} fullWidth />
-              <TextField label="Menşei" value={editForm.origin} onChange={handleEditChange('origin')} fullWidth />
-              <TextField label="Renk" value={editForm.color} onChange={handleEditChange('color')} fullWidth />
+              <OriginField
+                value={editForm.origin}
+                onChange={(origin) => setEditForm((prev) => (prev ? { ...prev, origin } : prev))}
+              />
+              <ColorField
+                value={editForm.color}
+                onChange={(color) => setEditForm((prev) => (prev ? { ...prev, color } : prev))}
+              />
               <TextField
                 label="Minimum Stok (m²)"
                 value={editForm.minimumStock}

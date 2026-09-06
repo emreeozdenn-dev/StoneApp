@@ -95,6 +95,7 @@ export interface IncomingStock {
   supplyType: string
   supplier: string
   batchCode: string
+  bundleCount: number
   quantity: number
   thickness: number
   texture: string
@@ -119,6 +120,7 @@ export interface CreateIncomingStockPayload {
   arrivalDate: string
   supplyType: string
   supplier: string
+  bundleCount: number
   quantity: number
   thickness: number
   texture: string
@@ -147,6 +149,7 @@ export interface UpdateIncomingStockPayload {
   arrivalDate: string
   supplyType: string
   supplier: string
+  bundleCount: number
   quantity: number
   thickness: number
   texture: string
@@ -178,6 +181,7 @@ export interface Plate {
   stoneId: number
   stoneName: string
   incomingStockId: number
+  bundleNumber: number | null
   texture: string
   thickness: number
   width: number
@@ -188,6 +192,7 @@ export interface Plate {
   saleCost: number | null
   saleCurrency: string
   saleAmount: number | null
+  saleAmountCurrency: string | null
   soldAt: string | null
   soldByUserName: string | null
   qrToken: string
@@ -195,11 +200,14 @@ export interface Plate {
   imageUrl?: string | null
   unitCost?: number
   costCurrency?: string
+  saleCostLiveRateTry?: number | null
+  saleCostArrivalRateTry?: number | null
 }
 
 export interface CreatePlatePayload {
   stoneId: number
   incomingStockId: number
+  bundleNumber: number | null
   width: number
   height: number
   warehouse: string
@@ -217,6 +225,7 @@ export async function createPlate(payload: CreatePlatePayload) {
 
 export interface UpdatePlatePayload {
   plateNo: string
+  bundleNumber: number | null
   width: number
   height: number
   warehouse: string
@@ -237,8 +246,8 @@ export async function unreservePlate(id: number) {
   return data as { message: string }
 }
 
-export async function markPlateSold(id: number, saleAmount: number | null) {
-  const { data } = await apiClient.post(`/plates/${id}/sell`, { saleAmount })
+export async function markPlateSold(id: number, saleAmount: number | null, saleCurrency: string) {
+  const { data } = await apiClient.post(`/plates/${id}/sell`, { saleAmount, saleCurrency })
   return data as { message: string }
 }
 
@@ -256,11 +265,12 @@ export async function deletePlate(id: number) {
   return data as { message: string }
 }
 
-export const SUPPLY_TYPES = ['Ocak', 'Ithalat', 'YerelTedarikci', 'Diger'] as const
+export const SUPPLY_TYPES = ['Ocak', 'Ithalat', 'YerelTedarikci', 'Konsinye', 'Diger'] as const
 export const SUPPLY_TYPE_LABELS: Record<string, string> = {
   Ocak: 'Ocak',
   Ithalat: 'İthalat',
   YerelTedarikci: 'Yerel Tedarikçi',
+  Konsinye: 'Konsinye',
   Diger: 'Diğer',
 }
 export const CURRENCIES = ['TRY', 'USD', 'EUR'] as const
@@ -302,5 +312,25 @@ export async function createWarehouse(name: string) {
 
 export async function deleteWarehouse(id: number) {
   const { data } = await apiClient.delete(`/warehouses/${id}`)
+  return data as { message: string }
+}
+
+export interface ColorOption {
+  id: number
+  name: string
+}
+
+export async function fetchColors(): Promise<ColorOption[]> {
+  const { data } = await apiClient.get<ColorOption[]>('/colors')
+  return data
+}
+
+export async function createColor(name: string) {
+  const { data } = await apiClient.post<ColorOption>('/colors', { name })
+  return data
+}
+
+export async function deleteColor(id: number) {
+  const { data } = await apiClient.delete(`/colors/${id}`)
   return data as { message: string }
 }

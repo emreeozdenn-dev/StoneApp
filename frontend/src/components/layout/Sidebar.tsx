@@ -18,6 +18,7 @@ import AdminPanelSettingsIcon from '@mui/icons-material/AdminPanelSettingsOutlin
 import HistoryIcon from '@mui/icons-material/HistoryOutlined'
 import SettingsIcon from '@mui/icons-material/SettingsOutlined'
 import FactCheckIcon from '@mui/icons-material/FactCheckOutlined'
+import RequestQuoteIcon from '@mui/icons-material/RequestQuoteOutlined'
 import { hasPermission } from '../../auth/useCurrentUser'
 
 interface SidebarProps {
@@ -51,6 +52,19 @@ export function Sidebar({ permissions, onNavigate }: SidebarProps) {
       )}
       {hasPermission(permissions, 'notifications.view') && (
         <NavItem to="/bildirim-gecmisi" icon={<NotificationsIcon />} label="Bildirim Geçmişi" onNavigate={onNavigate} />
+      )}
+
+      {hasPermission(permissions, 'offers.view') && (
+        <>
+          <Divider sx={{ my: 1.5, mx: 2 }} />
+          <Typography
+            variant="caption"
+            sx={{ px: 3, color: 'text.secondary', fontWeight: 600, letterSpacing: 0.4 }}
+          >
+            SATIŞ YÖNETİMİ
+          </Typography>
+          <NavItem to="/teklifler" icon={<RequestQuoteIcon />} label="Teklifler" onNavigate={onNavigate} />
+        </>
       )}
 
       {(hasPermission(permissions, 'users.manage') ||

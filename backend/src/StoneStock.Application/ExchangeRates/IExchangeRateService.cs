@@ -5,4 +5,5 @@ public sealed record ExchangeRatesResult(string Date, decimal? UsdTry, decimal? 
 public interface IExchangeRateService
 {
     Task<ExchangeRatesResult?> GetRatesAsync(CancellationToken ct);
+    Task<ExchangeRatesResult?> GetRatesForDateAsync(DateOnly date, CancellationToken ct);
 }

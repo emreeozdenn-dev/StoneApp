@@ -15,7 +15,20 @@ import {
   Typography,
 } from '@mui/material'
 import SearchIcon from '@mui/icons-material/SearchOutlined'
-import { fetchAuditLog } from '../../api/auditLog'
+import { fetchAuditLog, type AuditLogEntry } from '../../api/auditLog'
+import { ColumnSettingsButton } from '../../components/common/ColumnSettingsButton'
+import { type ColumnDef, useColumnPreferences } from '../../components/common/useColumnPreferences'
+import { useDraggableColumns } from '../../components/common/useDraggableColumns'
+
+type AuditLogColumnKey = 'createdAt' | 'userName' | 'action' | 'recordType' | 'details'
+
+const AUDIT_LOG_COLUMNS: ColumnDef<AuditLogColumnKey>[] = [
+  { key: 'createdAt', label: 'Tarih' },
+  { key: 'userName', label: 'Kullanıcı' },
+  { key: 'action', label: 'Eylem' },
+  { key: 'recordType', label: 'Kayıt Türü' },
+  { key: 'details', label: 'Detay' },
+]
 
 const actionLabel: Record<string, string> = {
   Created: 'Oluşturuldu',
@@ -50,6 +63,7 @@ const recordTypeLabel: Record<string, string> = {
   User: 'Kullanıcı',
   Role: 'Rol',
   SystemSettings: 'Sistem Ayarları',
+  Offer: 'Teklif',
 }
 
 export function AuditLogPage() {
@@ -71,6 +85,26 @@ export function AuditLogPage() {
       return [a.userName, a.recordId, a.details ?? ''].some((field) => field.toLowerCase().includes(term))
     })
   }, [auditQuery.data, search, recordTypeFilter])
+
+  const columnPrefs = useColumnPreferences('audit-log', AUDIT_LOG_COLUMNS)
+  const draggableColumns = useDraggableColumns(columnPrefs.reorderTo)
+
+  function renderAuditLogCell(key: AuditLogColumnKey, a: AuditLogEntry) {
+    switch (key) {
+      case 'createdAt':
+        return new Date(a.createdAt).toLocaleString('tr-TR')
+      case 'userName':
+        return a.userName
+      case 'action':
+        return <Chip label={actionLabel[a.action] ?? a.action} size="small" color={actionColor[a.action] ?? 'default'} />
+      case 'recordType':
+        return recordTypeLabel[a.recordType] ?? a.recordType
+      case 'details':
+        return a.details ?? a.recordId
+      default:
+        return null
+    }
+  }
 
   return (
     <Box>
@@ -110,29 +144,34 @@ export function AuditLogPage() {
             </MenuItem>
           ))}
         </TextField>
+        <ColumnSettingsButton columns={AUDIT_LOG_COLUMNS} prefs={columnPrefs} />
       </Stack>
 
       <Box sx={{ overflowX: 'auto' }}>
         <Table size="small">
           <TableHead>
             <TableRow>
-              <TableCell>Tarih</TableCell>
-              <TableCell>Kullanıcı</TableCell>
-              <TableCell>Eylem</TableCell>
-              <TableCell>Kayıt Türü</TableCell>
-              <TableCell>Detay</TableCell>
+              {columnPrefs.visibleOrderedKeys.map((key) => {
+                const col = AUDIT_LOG_COLUMNS.find((c) => c.key === key)
+                return (
+                  <TableCell key={key} align={col?.align} {...draggableColumns.getHeaderCellProps(key)}>
+                    {col?.label}
+                  </TableCell>
+                )
+              })}
             </TableRow>
           </TableHead>
           <TableBody>
             {filtered.map((a) => (
               <TableRow key={a.id}>
-                <TableCell>{new Date(a.createdAt).toLocaleString('tr-TR')}</TableCell>
-                <TableCell>{a.userName}</TableCell>
-                <TableCell>
-                  <Chip label={actionLabel[a.action] ?? a.action} size="small" color={actionColor[a.action] ?? 'default'} />
-                </TableCell>
-                <TableCell>{recordTypeLabel[a.recordType] ?? a.recordType}</TableCell>
-                <TableCell>{a.details ?? a.recordId}</TableCell>
+                {columnPrefs.visibleOrderedKeys.map((key) => {
+                  const col = AUDIT_LOG_COLUMNS.find((c) => c.key === key)
+                  return (
+                    <TableCell key={key} align={col?.align}>
+                      {renderAuditLogCell(key, a)}
+                    </TableCell>
+                  )
+                })}
               </TableRow>
             ))}
           </TableBody>

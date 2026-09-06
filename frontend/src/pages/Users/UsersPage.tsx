@@ -31,6 +31,22 @@ import {
 } from '../../api/users'
 import { adminResetTwoFactor } from '../../api/twoFactor'
 import { useCurrentUser } from '../../auth/useCurrentUser'
+import { ColumnSettingsButton } from '../../components/common/ColumnSettingsButton'
+import { type ColumnDef, useColumnPreferences } from '../../components/common/useColumnPreferences'
+import { useDraggableColumns } from '../../components/common/useDraggableColumns'
+
+type UserColumnKey = 'fullName' | 'username' | 'email' | 'role' | 'status' | 'twoFactor' | 'lastLogin' | 'active'
+
+const USER_COLUMNS: ColumnDef<UserColumnKey>[] = [
+  { key: 'fullName', label: 'Ad Soyad' },
+  { key: 'username', label: 'Kullanıcı Adı' },
+  { key: 'email', label: 'E-posta' },
+  { key: 'role', label: 'Rol' },
+  { key: 'status', label: 'Durum' },
+  { key: 'twoFactor', label: '2FA' },
+  { key: 'lastLogin', label: 'Son Giriş' },
+  { key: 'active', label: 'Aktif', align: 'right' },
+]
 
 function generatePassword(length = 12): string {
   const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnpqrstuvwxyz23456789!@#$%'
@@ -134,66 +150,91 @@ export function UsersPage() {
     setForm((prev) => ({ ...prev, [field]: e.target.value }))
   }
 
+  const columnPrefs = useColumnPreferences('users', USER_COLUMNS)
+  const draggableColumns = useDraggableColumns(columnPrefs.reorderTo)
+
+  function renderUserCell(key: UserColumnKey, u: UserListItem) {
+    switch (key) {
+      case 'fullName':
+        return `${u.firstName} ${u.lastName}`
+      case 'username':
+        return u.username
+      case 'email':
+        return u.email
+      case 'role':
+        return <Chip label={u.role} size="small" />
+      case 'status':
+        return (
+          <Chip
+            label={u.status}
+            size="small"
+            color={u.status === 'Aktif' ? 'success' : 'default'}
+            variant={u.status === 'Aktif' ? 'filled' : 'outlined'}
+          />
+        )
+      case 'twoFactor':
+        return (
+          <Chip
+            label={u.twoFactorEnabled ? 'Etkin' : 'Kapalı'}
+            size="small"
+            color={u.twoFactorEnabled ? 'success' : 'default'}
+            variant={u.twoFactorEnabled ? 'filled' : 'outlined'}
+          />
+        )
+      case 'lastLogin':
+        return u.lastLoginAt ? new Date(u.lastLoginAt).toLocaleString('tr-TR') : '—'
+      case 'active':
+        return (
+          <Switch
+            checked={u.status === 'Aktif'}
+            onChange={(e) => statusMutation.mutate({ id: u.id, active: e.target.checked })}
+          />
+        )
+      default:
+        return null
+    }
+  }
+
   return (
     <Box>
       <Stack direction="row" sx={{ justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 1, mb: 3 }}>
         <Typography variant="h5" sx={{ fontWeight: 600 }}>
           Kullanıcı Yönetimi
         </Typography>
-        <Button variant="contained" onClick={() => setDialogOpen(true)}>
-          Kullanıcı Ekle
-        </Button>
+        <Stack direction="row" spacing={1}>
+          <ColumnSettingsButton columns={USER_COLUMNS} prefs={columnPrefs} />
+          <Button variant="contained" onClick={() => setDialogOpen(true)}>
+            Kullanıcı Ekle
+          </Button>
+        </Stack>
       </Stack>
 
       <Box sx={{ overflowX: 'auto' }}>
       <Table sx={{ minWidth: 760 }}>
         <TableHead>
           <TableRow>
-            <TableCell>Ad Soyad</TableCell>
-            <TableCell>Kullanıcı Adı</TableCell>
-            <TableCell>E-posta</TableCell>
-            <TableCell>Rol</TableCell>
-            <TableCell>Durum</TableCell>
-            <TableCell>2FA</TableCell>
-            <TableCell>Son Giriş</TableCell>
-            <TableCell align="right">Aktif</TableCell>
+            {columnPrefs.visibleOrderedKeys.map((key) => {
+              const col = USER_COLUMNS.find((c) => c.key === key)
+              return (
+                <TableCell key={key} align={col?.align} {...draggableColumns.getHeaderCellProps(key)}>
+                  {col?.label}
+                </TableCell>
+              )
+            })}
             <TableCell align="right">İşlem</TableCell>
           </TableRow>
         </TableHead>
         <TableBody>
           {usersQuery.data?.map((u) => (
             <TableRow key={u.id}>
-              <TableCell>
-                {u.firstName} {u.lastName}
-              </TableCell>
-              <TableCell>{u.username}</TableCell>
-              <TableCell>{u.email}</TableCell>
-              <TableCell>
-                <Chip label={u.role} size="small" />
-              </TableCell>
-              <TableCell>
-                <Chip
-                  label={u.status}
-                  size="small"
-                  color={u.status === 'Aktif' ? 'success' : 'default'}
-                  variant={u.status === 'Aktif' ? 'filled' : 'outlined'}
-                />
-              </TableCell>
-              <TableCell>
-                <Chip
-                  label={u.twoFactorEnabled ? 'Etkin' : 'Kapalı'}
-                  size="small"
-                  color={u.twoFactorEnabled ? 'success' : 'default'}
-                  variant={u.twoFactorEnabled ? 'filled' : 'outlined'}
-                />
-              </TableCell>
-              <TableCell>{u.lastLoginAt ? new Date(u.lastLoginAt).toLocaleString('tr-TR') : '—'}</TableCell>
-              <TableCell align="right">
-                <Switch
-                  checked={u.status === 'Aktif'}
-                  onChange={(e) => statusMutation.mutate({ id: u.id, active: e.target.checked })}
-                />
-              </TableCell>
+              {columnPrefs.visibleOrderedKeys.map((key) => {
+                const col = USER_COLUMNS.find((c) => c.key === key)
+                return (
+                  <TableCell key={key} align={col?.align}>
+                    {renderUserCell(key, u)}
+                  </TableCell>
+                )
+              })}
               <TableCell align="right">
                 <Stack direction="row" spacing={1} sx={{ justifyContent: 'flex-end' }}>
                   <Button

@@ -8,11 +8,34 @@ public static class SaleCostCalculator
 {
     public static decimal Compute(IncomingStock incomingStock, ExchangeRatesResult? rates)
     {
-        var additionalCost = incomingStock.CustomsCost + incomingStock.ShippingCost + incomingStock.OtherCost;
-        var additionalPerArea = incomingStock.TotalArea > 0 ? additionalCost / incomingStock.TotalArea : 0m;
-        var totalInCostCurrency = incomingStock.UnitCost + additionalPerArea;
+        var totalInCostCurrency = RawTotal(incomingStock);
         return Convert(totalInCostCurrency, incomingStock.CostCurrency, incomingStock.SaleCurrency, rates)
             ?? totalInCostCurrency;
+    }
+
+    /// <summary>Maliyetin, verilen kur bilgisiyle TRY karşılığı (Maliyet Para Birimi zaten TRY ise çevrim yapılmaz).</summary>
+    public static decimal? ComputeInTry(IncomingStock incomingStock, ExchangeRatesResult? rates)
+    {
+        var totalInCostCurrency = RawTotal(incomingStock);
+        if (incomingStock.CostCurrency == Currency.TRY)
+        {
+            return totalInCostCurrency;
+        }
+
+        var rate = incomingStock.CostCurrency switch
+        {
+            Currency.USD => rates?.UsdTry,
+            Currency.EUR => rates?.EurTry,
+            _ => null,
+        };
+        return rate is > 0 ? totalInCostCurrency * rate.Value : null;
+    }
+
+    private static decimal RawTotal(IncomingStock incomingStock)
+    {
+        var additionalCost = incomingStock.CustomsCost + incomingStock.ShippingCost + incomingStock.OtherCost;
+        var additionalPerArea = incomingStock.TotalArea > 0 ? additionalCost / incomingStock.TotalArea : 0m;
+        return incomingStock.UnitCost + additionalPerArea;
     }
 
     private static decimal? Convert(decimal amount, Currency from, Currency to, ExchangeRatesResult? rates)

@@ -8,6 +8,7 @@ public record IncomingStockDto(
     string SupplyType,
     string Supplier,
     string BatchCode,
+    int BundleCount,
     decimal Quantity,
     decimal Thickness,
     string Texture,
@@ -28,6 +29,7 @@ public sealed record IncomingStockAdminDto(
     string SupplyType,
     string Supplier,
     string BatchCode,
+    int BundleCount,
     decimal Quantity,
     decimal Thickness,
     string Texture,
@@ -45,7 +47,7 @@ public sealed record IncomingStockAdminDto(
     decimal ShippingCost,
     decimal OtherCost,
     decimal TotalAdditionalCost)
-    : IncomingStockDto(Id, StoneId, StoneName, ArrivalDate, SupplyType, Supplier, BatchCode, Quantity,
+    : IncomingStockDto(Id, StoneId, StoneName, ArrivalDate, SupplyType, Supplier, BatchCode, BundleCount, Quantity,
         Thickness, Texture, Warehouse, SaleCurrency, SaleCost, Description, CreatedByUserName, PlateCountAdded,
         TotalArea, CreatedAt);
 
@@ -53,6 +55,7 @@ public sealed record UpdateIncomingStockRequest(
     DateOnly ArrivalDate,
     string SupplyType,
     string Supplier,
+    int BundleCount,
     decimal Quantity,
     decimal Thickness,
     string Texture,
@@ -71,6 +74,7 @@ public sealed record CreateIncomingStockRequest(
     DateOnly ArrivalDate,
     string SupplyType,
     string Supplier,
+    int BundleCount,
     decimal Quantity,
     decimal Thickness,
     string Texture,

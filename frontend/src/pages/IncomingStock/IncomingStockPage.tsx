@@ -8,9 +8,13 @@ import {
   DialogActions,
   DialogContent,
   DialogTitle,
+  Divider,
+  FormControlLabel,
+  Grid,
   InputAdornment,
   MenuItem,
   Stack,
+  Switch,
   Table,
   TableBody,
   TableCell,
@@ -31,22 +35,38 @@ import {
   type IncomingStock,
 } from '../../api/catalog'
 import { fetchStones } from '../../api/catalog'
-import { fetchExchangeRates, type ExchangeRates } from '../../api/exchangeRates'
+import { fetchExchangeRates, fetchHistoricalExchangeRates, type ExchangeRates } from '../../api/exchangeRates'
 import { hasPermission, useCurrentUser } from '../../auth/useCurrentUser'
+import { ColumnSettingsButton } from '../../components/common/ColumnSettingsButton'
 import { TextureField } from '../../components/common/TextureField'
+import { type ColumnDef, useColumnPreferences } from '../../components/common/useColumnPreferences'
+import { useDraggableColumns } from '../../components/common/useDraggableColumns'
 import { WarehouseField } from '../../components/common/WarehouseField'
+import { buildBundleLabels } from '../../utils/bundles'
+
+type IncomingStockColumnKey =
+  | 'batchCode'
+  | 'stoneName'
+  | 'arrivalDate'
+  | 'supplyType'
+  | 'supplier'
+  | 'plateCount'
+  | 'totalArea'
+  | 'saleCost'
+  | 'unitCost'
+  | 'totalAdditionalCost'
 
 const initialForm = {
   stoneId: '',
   arrivalDate: new Date().toISOString().slice(0, 10),
   supplyType: 'Ocak',
   supplier: '',
+  bundleCount: '',
   thickness: '',
   texture: 'Cilalı',
   warehouse: '',
   unitCost: '',
   costCurrency: 'USD',
-  saleCurrency: 'TRY',
   description: '',
   customsCost: '',
   shippingCost: '',
@@ -57,12 +77,12 @@ interface EditForm {
   arrivalDate: string
   supplyType: string
   supplier: string
+  bundleCount: string
   thickness: string
   texture: string
   warehouse: string
   unitCost: string
   costCurrency: string
-  saleCurrency: string
   description: string
   customsCost: string
   shippingCost: string
@@ -84,42 +104,32 @@ function unitSaleCostInCostCurrency(
   return (Number(unitCost) || 0) + additionalPerArea
 }
 
-function convertAmount(
-  amount: number,
-  from: string,
-  to: string,
-  rates: ExchangeRates | null | undefined,
-): number | null {
-  if (from === to) return amount
-  const toTry = (value: number, currency: string): number | null => {
-    if (currency === 'TRY') return value
-    if (currency === 'USD') return rates?.usdTry ? value * rates.usdTry : null
-    if (currency === 'EUR') return rates?.eurTry ? value * rates.eurTry : null
-    return null
-  }
-  const fromTry = (value: number, currency: string): number | null => {
-    if (currency === 'TRY') return value
-    if (currency === 'USD') return rates?.usdTry ? value / rates.usdTry : null
-    if (currency === 'EUR') return rates?.eurTry ? value / rates.eurTry : null
-    return null
-  }
-  const tryAmount = toTry(amount, from)
-  return tryAmount == null ? null : fromTry(tryAmount, to)
+function getRateForCurrency(currency: string, rates: ExchangeRates | null | undefined): number | null {
+  if (!rates) return null
+  if (currency === 'USD') return rates.usdTry ?? null
+  if (currency === 'EUR') return rates.eurTry ?? null
+  return null
 }
 
-function resolveSaleCost(
-  unitCost: string,
-  customs: string,
-  shipping: string,
-  other: string,
-  totalArea: number,
-  costCurrency: string,
-  saleCurrency: string,
-  rates: ExchangeRates | null | undefined,
+function toTryAmount(
+  amount: number,
+  currency: string,
+  rate: number | null,
 ): { value: number; converted: boolean } {
-  const total = unitSaleCostInCostCurrency(unitCost, customs, shipping, other, totalArea)
-  const converted = convertAmount(total, costCurrency, saleCurrency, rates)
-  return converted != null ? { value: converted, converted: true } : { value: total, converted: false }
+  if (currency === 'TRY') return { value: amount, converted: true }
+  if (rate && rate > 0) return { value: amount * rate, converted: true }
+  return { value: amount, converted: false }
+}
+
+function SectionTitle({ children }: { children: React.ReactNode }) {
+  return (
+    <Grid size={12}>
+      <Typography variant="overline" sx={{ fontWeight: 700, color: 'text.secondary', letterSpacing: 0.5 }}>
+        {children}
+      </Typography>
+      <Divider sx={{ mb: 1 }} />
+    </Grid>
+  )
 }
 
 export function IncomingStockPage() {
@@ -137,37 +147,10 @@ export function IncomingStockPage() {
   const [editForm, setEditForm] = useState<EditForm | null>(null)
   const [editError, setEditError] = useState<string | null>(null)
 
-  const createSaleCost = useMemo(
-    () =>
-      resolveSaleCost(
-        form.unitCost,
-        form.customsCost,
-        form.shippingCost,
-        form.otherCost,
-        0,
-        form.costCurrency,
-        form.saleCurrency,
-        ratesQuery.data,
-      ),
-    [form.unitCost, form.customsCost, form.shippingCost, form.otherCost, form.costCurrency, form.saleCurrency, ratesQuery.data],
-  )
-
-  const editSaleCost = useMemo(
-    () =>
-      editForm
-        ? resolveSaleCost(
-            editForm.unitCost,
-            editForm.customsCost,
-            editForm.shippingCost,
-            editForm.otherCost,
-            editingRow?.totalArea ?? 0,
-            editForm.costCurrency,
-            editForm.saleCurrency,
-            ratesQuery.data,
-          )
-        : { value: 0, converted: true },
-    [editForm, editingRow, ratesQuery.data],
-  )
+  const [createRateOverrideEnabled, setCreateRateOverrideEnabled] = useState(false)
+  const [createRateOverride, setCreateRateOverride] = useState('')
+  const [editRateOverrideEnabled, setEditRateOverrideEnabled] = useState(false)
+  const [editRateOverride, setEditRateOverride] = useState('')
 
   const canCreate = hasPermission(user?.permissions, 'incomingstock.create')
   const canEdit = hasPermission(user?.permissions, 'incomingstock.edit')
@@ -175,6 +158,127 @@ export function IncomingStockPage() {
   const canSeeCost =
     hasPermission(user?.permissions, 'cost.unit.view') &&
     hasPermission(user?.permissions, 'cost.currency.view')
+
+  const incomingStockColumns = useMemo<ColumnDef<IncomingStockColumnKey>[]>(() => {
+    const cols: ColumnDef<IncomingStockColumnKey>[] = [
+      { key: 'batchCode', label: 'Parti/Lot Kodu' },
+      { key: 'stoneName', label: 'Taş' },
+      { key: 'arrivalDate', label: 'Geliş Tarihi' },
+      { key: 'supplyType', label: 'Tedarik Türü' },
+      { key: 'supplier', label: 'Tedarikçi' },
+      { key: 'plateCount', label: 'Plaka Sayısı', align: 'right' },
+      { key: 'totalArea', label: 'Toplam Alan (m²)', align: 'right' },
+      { key: 'saleCost', label: 'Satış Maliyeti', align: 'right' },
+    ]
+    if (canSeeCost) {
+      cols.push({ key: 'unitCost', label: 'Birim Maliyet', align: 'right' })
+      cols.push({ key: 'totalAdditionalCost', label: 'Toplam Ek Maliyet', align: 'right' })
+    }
+    return cols
+  }, [canSeeCost])
+
+  const incomingStockColumnPrefs = useColumnPreferences('incoming-stock', incomingStockColumns)
+  const incomingStockDraggableColumns = useDraggableColumns(incomingStockColumnPrefs.reorderTo)
+
+  function renderIncomingStockCell(key: IncomingStockColumnKey, r: IncomingStock) {
+    switch (key) {
+      case 'batchCode':
+        return r.batchCode
+      case 'stoneName':
+        return r.stoneName
+      case 'arrivalDate':
+        return r.arrivalDate
+      case 'supplyType':
+        return SUPPLY_TYPE_LABELS[r.supplyType] ?? r.supplyType
+      case 'supplier':
+        return r.supplier
+      case 'plateCount':
+        return r.plateCountAdded
+      case 'totalArea':
+        return r.totalArea.toLocaleString('tr-TR')
+      case 'saleCost':
+        return r.saleCost != null ? `${r.saleCost.toLocaleString('tr-TR')} ${r.saleCurrency}` : '—'
+      case 'unitCost':
+        return `${r.unitCost?.toLocaleString('tr-TR')} ${r.costCurrency}`
+      case 'totalAdditionalCost':
+        return `${r.totalAdditionalCost?.toLocaleString('tr-TR') ?? '0'} ${r.costCurrency}`
+      default:
+        return null
+    }
+  }
+
+  const createHistoricalRateQuery = useQuery({
+    queryKey: ['exchange-rates-historical', form.arrivalDate],
+    queryFn: () => fetchHistoricalExchangeRates(form.arrivalDate),
+    enabled: canSeeCost && form.costCurrency !== 'TRY' && !!form.arrivalDate,
+  })
+
+  const editHistoricalRateQuery = useQuery({
+    queryKey: ['exchange-rates-historical', editForm?.arrivalDate],
+    queryFn: () => fetchHistoricalExchangeRates(editForm!.arrivalDate),
+    enabled: canSeeCost && !!editForm && editForm.costCurrency !== 'TRY' && !!editForm.arrivalDate,
+  })
+
+  const createRawTotal = useMemo(
+    () => unitSaleCostInCostCurrency(form.unitCost, form.customsCost, form.shippingCost, form.otherCost, 0),
+    [form.unitCost, form.customsCost, form.shippingCost, form.otherCost],
+  )
+
+  const createFetchedArrivalRate = getRateForCurrency(form.costCurrency, createHistoricalRateQuery.data)
+  const createEffectiveArrivalRate = createRateOverrideEnabled
+    ? Number(createRateOverride) || null
+    : createFetchedArrivalRate
+
+  const createSaleCostLive = useMemo(
+    () => toTryAmount(createRawTotal, form.costCurrency, getRateForCurrency(form.costCurrency, ratesQuery.data)),
+    [createRawTotal, form.costCurrency, ratesQuery.data],
+  )
+  const createSaleCostArrival = useMemo(
+    () => toTryAmount(createRawTotal, form.costCurrency, createEffectiveArrivalRate),
+    [createRawTotal, form.costCurrency, createEffectiveArrivalRate],
+  )
+
+  const editRawTotal = useMemo(
+    () =>
+      editForm
+        ? unitSaleCostInCostCurrency(
+            editForm.unitCost,
+            editForm.customsCost,
+            editForm.shippingCost,
+            editForm.otherCost,
+            editingRow?.totalArea ?? 0,
+          )
+        : 0,
+    [editForm, editingRow],
+  )
+
+  const editFetchedArrivalRate = getRateForCurrency(editForm?.costCurrency ?? 'TRY', editHistoricalRateQuery.data)
+  const editEffectiveArrivalRate = editRateOverrideEnabled
+    ? Number(editRateOverride) || null
+    : editFetchedArrivalRate
+
+  const editSaleCostLive = useMemo(
+    () =>
+      editForm
+        ? toTryAmount(editRawTotal, editForm.costCurrency, getRateForCurrency(editForm.costCurrency, ratesQuery.data))
+        : { value: 0, converted: true },
+    [editRawTotal, editForm, ratesQuery.data],
+  )
+  const editSaleCostArrival = useMemo(
+    () =>
+      editForm ? toTryAmount(editRawTotal, editForm.costCurrency, editEffectiveArrivalRate) : { value: 0, converted: true },
+    [editRawTotal, editForm, editEffectiveArrivalRate],
+  )
+
+  const createBundleLabels = useMemo(
+    () => buildBundleLabels('Otomatik Kod', Number(form.bundleCount) || 0),
+    [form.bundleCount],
+  )
+
+  const editBundleLabels = useMemo(
+    () => (editForm && editingRow ? buildBundleLabels(editingRow.batchCode, Number(editForm.bundleCount) || 0) : []),
+    [editForm, editingRow],
+  )
 
   const [search, setSearch] = useState('')
   const [supplyTypeFilter, setSupplyTypeFilter] = useState('Tumu')
@@ -194,6 +298,8 @@ export function IncomingStockPage() {
       queryClient.invalidateQueries({ queryKey: ['stones'] })
       setDialogOpen(false)
       setForm(initialForm)
+      setCreateRateOverrideEnabled(false)
+      setCreateRateOverride('')
       setError(null)
     },
     onError: (err: unknown) => {
@@ -210,13 +316,14 @@ export function IncomingStockPage() {
         arrivalDate: payload.arrivalDate,
         supplyType: payload.supplyType,
         supplier: payload.supplier,
+        bundleCount: Number(payload.bundleCount) || 0,
         quantity: 0,
         thickness: Number(payload.thickness) || 0,
         texture: payload.texture,
         warehouse: payload.warehouse,
         unitCost: Number(payload.unitCost) || 0,
         costCurrency: payload.costCurrency,
-        saleCurrency: payload.saleCurrency,
+        saleCurrency: payload.costCurrency,
         saleCost,
         description: payload.description === '' ? null : payload.description,
         customsCost: Number(payload.customsCost) || 0,
@@ -264,17 +371,19 @@ export function IncomingStockPage() {
       arrivalDate: row.arrivalDate,
       supplyType: row.supplyType,
       supplier: row.supplier,
+      bundleCount: String(row.bundleCount ?? 0),
       thickness: String(row.thickness),
       texture: row.texture,
       warehouse: row.warehouse,
       unitCost: String(row.unitCost ?? 0),
       costCurrency: row.costCurrency ?? 'USD',
-      saleCurrency: row.saleCurrency,
       description: row.description ?? '',
       customsCost: String(row.customsCost ?? 0),
       shippingCost: String(row.shippingCost ?? 0),
       otherCost: String(row.otherCost ?? 0),
     })
+    setEditRateOverrideEnabled(false)
+    setEditRateOverride('')
     setEditError(null)
   }
 
@@ -288,14 +397,15 @@ export function IncomingStockPage() {
       arrivalDate: form.arrivalDate,
       supplyType: form.supplyType,
       supplier: form.supplier,
+      bundleCount: Number(form.bundleCount) || 0,
       quantity: 0,
       thickness: Number(form.thickness) || 0,
       texture: form.texture,
       warehouse: form.warehouse,
       unitCost: canSeeCost ? Number(form.unitCost) || 0 : 0,
       costCurrency: form.costCurrency,
-      saleCurrency: form.saleCurrency,
-      saleCost: createSaleCost.value,
+      saleCurrency: form.costCurrency,
+      saleCost: createRawTotal,
       description: form.description === '' ? null : form.description,
       customsCost: canSeeCost ? Number(form.customsCost) || 0 : 0,
       shippingCost: canSeeCost ? Number(form.shippingCost) || 0 : 0,
@@ -348,48 +458,35 @@ export function IncomingStockPage() {
             </MenuItem>
           ))}
         </TextField>
+        <ColumnSettingsButton columns={incomingStockColumns} prefs={incomingStockColumnPrefs} />
       </Stack>
 
       <Box sx={{ overflowX: 'auto' }}>
         <Table sx={{ minWidth: 1080 }}>
           <TableHead>
             <TableRow>
-              <TableCell>Parti/Lot Kodu</TableCell>
-              <TableCell>Taş</TableCell>
-              <TableCell>Geliş Tarihi</TableCell>
-              <TableCell>Tedarik Türü</TableCell>
-              <TableCell>Tedarikçi</TableCell>
-              <TableCell align="right">Plaka Sayısı</TableCell>
-              <TableCell align="right">Toplam Alan (m²)</TableCell>
-              <TableCell align="right">Satış Maliyeti</TableCell>
-              {canSeeCost && <TableCell align="right">Birim Maliyet</TableCell>}
-              {canSeeCost && <TableCell align="right">Toplam Ek Maliyet</TableCell>}
+              {incomingStockColumnPrefs.visibleOrderedKeys.map((key) => {
+                const col = incomingStockColumns.find((c) => c.key === key)
+                return (
+                  <TableCell key={key} align={col?.align} {...incomingStockDraggableColumns.getHeaderCellProps(key)}>
+                    {col?.label}
+                  </TableCell>
+                )
+              })}
               {(canEdit || canDelete) && <TableCell>İşlem</TableCell>}
             </TableRow>
           </TableHead>
           <TableBody>
             {filteredRows.map((r) => (
               <TableRow key={r.id}>
-                <TableCell>{r.batchCode}</TableCell>
-                <TableCell>{r.stoneName}</TableCell>
-                <TableCell>{r.arrivalDate}</TableCell>
-                <TableCell>{SUPPLY_TYPE_LABELS[r.supplyType] ?? r.supplyType}</TableCell>
-                <TableCell>{r.supplier}</TableCell>
-                <TableCell align="right">{r.plateCountAdded}</TableCell>
-                <TableCell align="right">{r.totalArea.toLocaleString('tr-TR')}</TableCell>
-                <TableCell align="right">
-                  {r.saleCost != null ? `${r.saleCost.toLocaleString('tr-TR')} ${r.saleCurrency}` : '—'}
-                </TableCell>
-                {canSeeCost && (
-                  <TableCell align="right">
-                    {r.unitCost?.toLocaleString('tr-TR')} {r.costCurrency}
-                  </TableCell>
-                )}
-                {canSeeCost && (
-                  <TableCell align="right">
-                    {r.totalAdditionalCost?.toLocaleString('tr-TR') ?? '0'} {r.costCurrency}
-                  </TableCell>
-                )}
+                {incomingStockColumnPrefs.visibleOrderedKeys.map((key) => {
+                  const col = incomingStockColumns.find((c) => c.key === key)
+                  return (
+                    <TableCell key={key} align={col?.align}>
+                      {renderIncomingStockCell(key, r)}
+                    </TableCell>
+                  )
+                })}
                 {(canEdit || canDelete) && (
                   <TableCell>
                     <Stack direction="row" spacing={1}>
@@ -424,102 +521,111 @@ export function IncomingStockPage() {
         )}
       </Box>
 
-      <Dialog open={dialogOpen} onClose={() => setDialogOpen(false)} maxWidth="sm" fullWidth>
+      <Dialog open={dialogOpen} onClose={() => setDialogOpen(false)} maxWidth="md" fullWidth>
         <DialogTitle>Yeni Gelen Parti/Lot</DialogTitle>
         <DialogContent>
-          <Stack spacing={2} sx={{ mt: 1 }}>
-            <Alert severity="info" variant="outlined">
-              Parti/Lot Kodu, sıradaki numaraya göre otomatik atanacak (örn. PB-{new Date().getFullYear()}-001).
-            </Alert>
-            <TextField
-              select
-              label="Taş"
-              value={form.stoneId}
-              onChange={(e) => setForm((prev) => ({ ...prev, stoneId: e.target.value }))}
-              fullWidth
-            >
-              {stonesQuery.data?.map((s) => (
-                <MenuItem key={s.id} value={s.id}>
-                  {s.name} ({s.code})
-                </MenuItem>
-              ))}
-            </TextField>
-            <TextField
-              label="Geliş Tarihi"
-              type="date"
-              value={form.arrivalDate}
-              onChange={handleChange('arrivalDate')}
-              fullWidth
-            />
-            <TextField
-              select
-              label="Tedarik Türü"
-              value={form.supplyType}
-              onChange={(e) => setForm((prev) => ({ ...prev, supplyType: e.target.value }))}
-              fullWidth
-            >
-              {SUPPLY_TYPES.map((t) => (
-                <MenuItem key={t} value={t}>
-                  {SUPPLY_TYPE_LABELS[t]}
-                </MenuItem>
-              ))}
-            </TextField>
-            <TextField label="Tedarikçi" value={form.supplier} onChange={handleChange('supplier')} fullWidth />
-            <TextField label="Kalınlık (cm)" value={form.thickness} onChange={handleChange('thickness')} fullWidth />
-            <TextureField
-              value={form.texture}
-              onChange={(value) => setForm((prev) => ({ ...prev, texture: value }))}
-            />
-            <WarehouseField
-              value={form.warehouse}
-              onChange={(value) => setForm((prev) => ({ ...prev, warehouse: value }))}
-            />
-            <TextField
-              label="Açıklama"
-              value={form.description}
-              onChange={handleChange('description')}
-              multiline
-              minRows={2}
-              fullWidth
-            />
-            <Stack direction="row" spacing={2}>
-              <TextField
-                label="Satış Maliyeti (m²)"
-                value={createSaleCost.value.toLocaleString('tr-TR', { maximumFractionDigits: 2 })}
-                fullWidth
-                disabled
-                helperText={
-                  createSaleCost.converted
-                    ? 'Birim Maliyet + (Toplam Ek Maliyet ÷ Toplam Alan m²), güncel kurla hesaplanır.'
-                    : 'Güncel kur alınamadı; Maliyet Para Biriminde gösteriliyor.'
-                }
-                slotProps={{
-                  input: {
-                    endAdornment: (
-                      <InputAdornment position="end">
-                        {createSaleCost.converted ? form.saleCurrency : form.costCurrency}
-                      </InputAdornment>
-                    ),
-                  },
-                }}
-              />
+          <Grid container spacing={2} sx={{ mt: 0.5 }}>
+            <SectionTitle>1. Parti/Lot Bilgileri</SectionTitle>
+            <Grid size={12}>
+              <Alert severity="info" variant="outlined">
+                Parti/Lot Kodu, sıradaki numaraya göre otomatik atanacak (örn. PB-{new Date().getFullYear()}-001).
+              </Alert>
+            </Grid>
+            <Grid size={{ xs: 12, sm: 6 }}>
               <TextField
                 select
-                label="Satış Para Birimi"
-                value={form.saleCurrency}
-                onChange={(e) => setForm((prev) => ({ ...prev, saleCurrency: e.target.value }))}
+                label="Taş"
+                value={form.stoneId}
+                onChange={(e) => setForm((prev) => ({ ...prev, stoneId: e.target.value }))}
                 fullWidth
               >
-                {CURRENCIES.map((c) => (
-                  <MenuItem key={c} value={c}>
-                    {c}
+                {stonesQuery.data?.map((s) => (
+                  <MenuItem key={s.id} value={s.id}>
+                    {s.name} ({s.code})
                   </MenuItem>
                 ))}
               </TextField>
-            </Stack>
+            </Grid>
+            <Grid size={{ xs: 12, sm: 6 }}>
+              <TextField
+                label="Geliş Tarihi"
+                type="date"
+                value={form.arrivalDate}
+                onChange={handleChange('arrivalDate')}
+                fullWidth
+              />
+            </Grid>
+            <Grid size={{ xs: 12, sm: 6 }}>
+              <TextField
+                select
+                label="Tedarik Türü"
+                value={form.supplyType}
+                onChange={(e) => setForm((prev) => ({ ...prev, supplyType: e.target.value }))}
+                fullWidth
+              >
+                {SUPPLY_TYPES.map((t) => (
+                  <MenuItem key={t} value={t}>
+                    {SUPPLY_TYPE_LABELS[t]}
+                  </MenuItem>
+                ))}
+              </TextField>
+            </Grid>
+            <Grid size={{ xs: 12, sm: 6 }}>
+              <TextField label="Tedarikçi" value={form.supplier} onChange={handleChange('supplier')} fullWidth />
+            </Grid>
+
+            <SectionTitle>2. Ürün/Stok Bilgileri</SectionTitle>
+            <Grid size={{ xs: 12, sm: 6 }}>
+              <TextField
+                label="Gelen Bundle Sayısı"
+                value={form.bundleCount}
+                onChange={handleChange('bundleCount')}
+                fullWidth
+              />
+            </Grid>
+            <Grid size={{ xs: 12, sm: 6 }}>
+              <TextField label="Kalınlık (cm)" value={form.thickness} onChange={handleChange('thickness')} fullWidth />
+            </Grid>
+            {createBundleLabels.length > 0 && (
+              <Grid size={12}>
+                <TextField
+                  label="Bundle Kodları"
+                  value={createBundleLabels.join('\n')}
+                  fullWidth
+                  disabled
+                  multiline
+                  minRows={Math.min(createBundleLabels.length, 6)}
+                  helperText="Parti/Lot Kodu kayıt oluşturulduktan sonra kesinleşir; buradaki kod geçicidir."
+                />
+              </Grid>
+            )}
+            <Grid size={{ xs: 12, sm: 6 }}>
+              <TextureField
+                value={form.texture}
+                onChange={(value) => setForm((prev) => ({ ...prev, texture: value }))}
+              />
+            </Grid>
+            <Grid size={{ xs: 12, sm: 6 }}>
+              <WarehouseField
+                value={form.warehouse}
+                onChange={(value) => setForm((prev) => ({ ...prev, warehouse: value }))}
+              />
+            </Grid>
+            <Grid size={12}>
+              <TextField
+                label="Açıklama"
+                value={form.description}
+                onChange={handleChange('description')}
+                multiline
+                minRows={2}
+                fullWidth
+              />
+            </Grid>
+
             {canSeeCost && (
               <>
-                <Stack direction="row" spacing={2}>
+                <SectionTitle>3. Maliyet Bilgileri</SectionTitle>
+                <Grid size={{ xs: 12, sm: 6 }}>
                   <TextField
                     label="Birim Maliyet (m²)"
                     value={form.unitCost}
@@ -531,6 +637,8 @@ export function IncomingStockPage() {
                       },
                     }}
                   />
+                </Grid>
+                <Grid size={{ xs: 12, sm: 6 }}>
                   <TextField
                     select
                     label="Maliyet Para Birimi"
@@ -544,49 +652,192 @@ export function IncomingStockPage() {
                       </MenuItem>
                     ))}
                   </TextField>
-                </Stack>
-                <TextField
-                  label="Gümrük Maliyeti"
-                  value={form.customsCost}
-                  onChange={handleChange('customsCost')}
-                  fullWidth
-                  slotProps={{
-                    input: { endAdornment: <InputAdornment position="end">{form.costCurrency}</InputAdornment> },
-                  }}
-                />
-                <TextField
-                  label="Nakliye Maliyeti"
-                  value={form.shippingCost}
-                  onChange={handleChange('shippingCost')}
-                  fullWidth
-                  slotProps={{
-                    input: { endAdornment: <InputAdornment position="end">{form.costCurrency}</InputAdornment> },
-                  }}
-                />
-                <TextField
-                  label="Diğer Maliyet"
-                  value={form.otherCost}
-                  onChange={handleChange('otherCost')}
-                  fullWidth
-                  slotProps={{
-                    input: { endAdornment: <InputAdornment position="end">{form.costCurrency}</InputAdornment> },
-                  }}
-                />
-                <TextField
-                  label="Toplam Ek Maliyet"
-                  value={totalAdditionalCost(form.customsCost, form.shippingCost, form.otherCost).toLocaleString(
-                    'tr-TR',
-                  )}
-                  fullWidth
-                  disabled
-                  slotProps={{
-                    input: { endAdornment: <InputAdornment position="end">{form.costCurrency}</InputAdornment> },
-                  }}
-                />
+                </Grid>
+                <Grid size={{ xs: 12, sm: 6 }}>
+                  <TextField
+                    label="Gümrük Maliyeti"
+                    value={form.customsCost}
+                    onChange={handleChange('customsCost')}
+                    fullWidth
+                    slotProps={{
+                      input: { endAdornment: <InputAdornment position="end">{form.costCurrency}</InputAdornment> },
+                    }}
+                  />
+                </Grid>
+                <Grid size={{ xs: 12, sm: 6 }}>
+                  <TextField
+                    label="Nakliye Maliyeti"
+                    value={form.shippingCost}
+                    onChange={handleChange('shippingCost')}
+                    fullWidth
+                    slotProps={{
+                      input: { endAdornment: <InputAdornment position="end">{form.costCurrency}</InputAdornment> },
+                    }}
+                  />
+                </Grid>
+                <Grid size={{ xs: 12, sm: 6 }}>
+                  <TextField
+                    label="Diğer Maliyet"
+                    value={form.otherCost}
+                    onChange={handleChange('otherCost')}
+                    fullWidth
+                    slotProps={{
+                      input: { endAdornment: <InputAdornment position="end">{form.costCurrency}</InputAdornment> },
+                    }}
+                  />
+                </Grid>
+                <Grid size={{ xs: 12, sm: 6 }}>
+                  <TextField
+                    label="Toplam Ek Maliyet"
+                    value={totalAdditionalCost(form.customsCost, form.shippingCost, form.otherCost).toLocaleString(
+                      'tr-TR',
+                    )}
+                    fullWidth
+                    disabled
+                    slotProps={{
+                      input: { endAdornment: <InputAdornment position="end">{form.costCurrency}</InputAdornment> },
+                    }}
+                  />
+                </Grid>
+
+                {form.costCurrency !== 'TRY' && (
+                  <>
+                    <SectionTitle>4. Kur Bilgileri</SectionTitle>
+                    <Grid size={{ xs: 12, sm: 6 }}>
+                      <TextField
+                        label="Geliş Tarihi Kur Bilgisi"
+                        value={
+                          createRateOverrideEnabled
+                            ? createRateOverride
+                            : (createFetchedArrivalRate?.toLocaleString('tr-TR', { maximumFractionDigits: 4 }) ?? '')
+                        }
+                        onChange={(e) => setCreateRateOverride(e.target.value)}
+                        disabled={!createRateOverrideEnabled}
+                        fullWidth
+                        placeholder={createHistoricalRateQuery.isFetching ? 'Kur alınıyor…' : undefined}
+                        helperText={
+                          createHistoricalRateQuery.data?.date
+                            ? `TCMB, ${createHistoricalRateQuery.data.date} tarihli kur (1 ${form.costCurrency} → TRY)`
+                            : !createHistoricalRateQuery.isFetching
+                              ? 'Kur alınamadı; elle girebilirsiniz.'
+                              : undefined
+                        }
+                        slotProps={{
+                          input: { endAdornment: <InputAdornment position="end">TRY</InputAdornment> },
+                        }}
+                      />
+                    </Grid>
+                    <Grid size={{ xs: 12, sm: 6 }} sx={{ display: 'flex', alignItems: 'center' }}>
+                      <FormControlLabel
+                        control={
+                          <Switch
+                            checked={createRateOverrideEnabled}
+                            onChange={(e) => {
+                              const checked = e.target.checked
+                              setCreateRateOverrideEnabled(checked)
+                              if (checked) {
+                                setCreateRateOverride(
+                                  createFetchedArrivalRate != null ? String(createFetchedArrivalRate) : '',
+                                )
+                              }
+                            }}
+                          />
+                        }
+                        label="Kuru Değiştir"
+                      />
+                    </Grid>
+                    <Grid size={{ xs: 12, sm: 6 }}>
+                      <TextField
+                        label="Güncel Kur (TCMB)"
+                        value={
+                          getRateForCurrency(form.costCurrency, ratesQuery.data)?.toLocaleString('tr-TR', {
+                            maximumFractionDigits: 4,
+                          }) ?? ''
+                        }
+                        fullWidth
+                        disabled
+                        helperText={
+                          ratesQuery.data?.date
+                            ? `TCMB, ${ratesQuery.data.date} tarihli güncel kur (1 ${form.costCurrency} → TRY)`
+                            : 'Güncel kur alınamadı.'
+                        }
+                        slotProps={{
+                          input: { endAdornment: <InputAdornment position="end">TRY</InputAdornment> },
+                        }}
+                      />
+                    </Grid>
+                  </>
+                )}
+
+                <SectionTitle>5. Satış Fiyatlandırması</SectionTitle>
+                <Grid size={{ xs: 12, sm: 6 }}>
+                  <TextField
+                    label="Satış Maliyeti"
+                    value={createRawTotal.toLocaleString('tr-TR', { maximumFractionDigits: 2 })}
+                    fullWidth
+                    disabled
+                    helperText="Birim Maliyet + (Toplam Ek Maliyet ÷ Toplam Alan m²)."
+                    slotProps={{
+                      input: { endAdornment: <InputAdornment position="end">{form.costCurrency}</InputAdornment> },
+                    }}
+                  />
+                </Grid>
+                {form.costCurrency !== 'TRY' && (
+                  <>
+                    <Grid size={{ xs: 12, sm: 6 }}>
+                      <TextField
+                        label="Satış Maliyeti (Güncel Kura Göre)"
+                        value={createSaleCostLive.value.toLocaleString('tr-TR', { maximumFractionDigits: 2 })}
+                        fullWidth
+                        disabled
+                        helperText={
+                          createSaleCostLive.converted
+                            ? "Bugünün TCMB kuruyla TRY'ye çevrilir."
+                            : 'Güncel kur alınamadı; Maliyet Para Biriminde gösteriliyor.'
+                        }
+                        slotProps={{
+                          input: {
+                            endAdornment: (
+                              <InputAdornment position="end">
+                                {createSaleCostLive.converted ? 'TRY' : form.costCurrency}
+                              </InputAdornment>
+                            ),
+                          },
+                        }}
+                      />
+                    </Grid>
+                    <Grid size={{ xs: 12, sm: 6 }}>
+                      <TextField
+                        label="Satış Maliyeti (Geliş Kuruna Göre)"
+                        value={createSaleCostArrival.value.toLocaleString('tr-TR', { maximumFractionDigits: 2 })}
+                        fullWidth
+                        disabled
+                        helperText={
+                          createSaleCostArrival.converted
+                            ? 'Geliş Tarihi Kur Bilgisi kullanılarak TRY karşılığı hesaplanır.'
+                            : 'Geliş tarihi kuru alınamadı; Maliyet Para Biriminde gösteriliyor.'
+                        }
+                        slotProps={{
+                          input: {
+                            endAdornment: (
+                              <InputAdornment position="end">
+                                {createSaleCostArrival.converted ? 'TRY' : form.costCurrency}
+                              </InputAdornment>
+                            ),
+                          },
+                        }}
+                      />
+                    </Grid>
+                  </>
+                )}
               </>
             )}
-            {error && <Alert severity="error">{error}</Alert>}
-          </Stack>
+            {error && (
+              <Grid size={12}>
+                <Alert severity="error">{error}</Alert>
+              </Grid>
+            )}
+          </Grid>
         </DialogContent>
         <DialogActions>
           <Button onClick={() => setDialogOpen(false)}>Vazgeç</Button>
@@ -596,101 +847,110 @@ export function IncomingStockPage() {
         </DialogActions>
       </Dialog>
 
-      <Dialog open={!!editingRow} onClose={() => setEditingRow(null)} maxWidth="sm" fullWidth>
+      <Dialog open={!!editingRow} onClose={() => setEditingRow(null)} maxWidth="md" fullWidth>
         <DialogTitle>Gelen Parti/Lot Kaydını Düzenle</DialogTitle>
         <DialogContent>
           {editForm && (
-            <Stack spacing={2} sx={{ mt: 1 }}>
-              <TextField label="Parti/Lot Kodu" value={editingRow?.batchCode ?? ''} fullWidth disabled />
-              <TextField label="Taş" value={editingRow?.stoneName ?? ''} fullWidth disabled />
-              <TextField
-                label="Geliş Tarihi"
-                type="date"
-                value={editForm.arrivalDate}
-                onChange={handleEditChange('arrivalDate')}
-                fullWidth
-              />
-              <TextField
-                select
-                label="Tedarik Türü"
-                value={editForm.supplyType}
-                onChange={(e) => setEditForm((prev) => (prev ? { ...prev, supplyType: e.target.value } : prev))}
-                fullWidth
-              >
-                {SUPPLY_TYPES.map((t) => (
-                  <MenuItem key={t} value={t}>
-                    {SUPPLY_TYPE_LABELS[t]}
-                  </MenuItem>
-                ))}
-              </TextField>
-              <TextField label="Tedarikçi" value={editForm.supplier} onChange={handleEditChange('supplier')} fullWidth />
-              <TextField
-                label="Kalınlık (cm)"
-                value={editForm.thickness}
-                onChange={handleEditChange('thickness')}
-                fullWidth
-              />
-              <TextureField
-                value={editForm.texture}
-                onChange={(value) => setEditForm((prev) => (prev ? { ...prev, texture: value } : prev))}
-              />
-              <WarehouseField
-                value={editForm.warehouse}
-                onChange={(value) => setEditForm((prev) => (prev ? { ...prev, warehouse: value } : prev))}
-              />
-              <TextField
-                label="Açıklama"
-                value={editForm.description}
-                onChange={handleEditChange('description')}
-                multiline
-                minRows={2}
-                fullWidth
-              />
-              <TextField
-                label="Toplam Alan (m²)"
-                value={(editingRow?.totalArea ?? 0).toLocaleString('tr-TR')}
-                fullWidth
-                disabled
-                helperText="Plakalar eklendikçe otomatik hesaplanır."
-              />
-              <Stack direction="row" spacing={2}>
+            <Grid container spacing={2} sx={{ mt: 0.5 }}>
+              <SectionTitle>1. Parti/Lot Bilgileri</SectionTitle>
+              <Grid size={{ xs: 12, sm: 6 }}>
+                <TextField label="Parti/Lot Kodu" value={editingRow?.batchCode ?? ''} fullWidth disabled />
+              </Grid>
+              <Grid size={{ xs: 12, sm: 6 }}>
+                <TextField label="Taş" value={editingRow?.stoneName ?? ''} fullWidth disabled />
+              </Grid>
+              <Grid size={{ xs: 12, sm: 6 }}>
                 <TextField
-                  label="Satış Maliyeti (m²)"
-                  value={editSaleCost.value.toLocaleString('tr-TR', { maximumFractionDigits: 2 })}
+                  label="Geliş Tarihi"
+                  type="date"
+                  value={editForm.arrivalDate}
+                  onChange={handleEditChange('arrivalDate')}
                   fullWidth
-                  disabled
-                  helperText={
-                    editSaleCost.converted
-                      ? 'Birim Maliyet + (Toplam Ek Maliyet ÷ Toplam Alan m²), güncel kurla hesaplanır.'
-                      : 'Güncel kur alınamadı; Maliyet Para Biriminde gösteriliyor.'
-                  }
-                  slotProps={{
-                    input: {
-                      endAdornment: (
-                        <InputAdornment position="end">
-                          {editSaleCost.converted ? editForm.saleCurrency : editForm.costCurrency}
-                        </InputAdornment>
-                      ),
-                    },
-                  }}
                 />
+              </Grid>
+              <Grid size={{ xs: 12, sm: 6 }}>
                 <TextField
                   select
-                  label="Satış Para Birimi"
-                  value={editForm.saleCurrency}
-                  onChange={(e) => setEditForm((prev) => (prev ? { ...prev, saleCurrency: e.target.value } : prev))}
+                  label="Tedarik Türü"
+                  value={editForm.supplyType}
+                  onChange={(e) => setEditForm((prev) => (prev ? { ...prev, supplyType: e.target.value } : prev))}
                   fullWidth
                 >
-                  {CURRENCIES.map((c) => (
-                    <MenuItem key={c} value={c}>
-                      {c}
+                  {SUPPLY_TYPES.map((t) => (
+                    <MenuItem key={t} value={t}>
+                      {SUPPLY_TYPE_LABELS[t]}
                     </MenuItem>
                   ))}
                 </TextField>
-              </Stack>
+              </Grid>
+              <Grid size={{ xs: 12, sm: 6 }}>
+                <TextField label="Tedarikçi" value={editForm.supplier} onChange={handleEditChange('supplier')} fullWidth />
+              </Grid>
+
+              <SectionTitle>2. Ürün/Stok Bilgileri</SectionTitle>
+              <Grid size={{ xs: 12, sm: 6 }}>
+                <TextField
+                  label="Gelen Bundle Sayısı"
+                  value={editForm.bundleCount}
+                  onChange={handleEditChange('bundleCount')}
+                  fullWidth
+                />
+              </Grid>
+              <Grid size={{ xs: 12, sm: 6 }}>
+                <TextField
+                  label="Kalınlık (cm)"
+                  value={editForm.thickness}
+                  onChange={handleEditChange('thickness')}
+                  fullWidth
+                />
+              </Grid>
+              {editBundleLabels.length > 0 && (
+                <Grid size={12}>
+                  <TextField
+                    label="Bundle Kodları"
+                    value={editBundleLabels.join('\n')}
+                    fullWidth
+                    disabled
+                    multiline
+                    minRows={Math.min(editBundleLabels.length, 6)}
+                  />
+                </Grid>
+              )}
+              <Grid size={{ xs: 12, sm: 6 }}>
+                <TextureField
+                  value={editForm.texture}
+                  onChange={(value) => setEditForm((prev) => (prev ? { ...prev, texture: value } : prev))}
+                />
+              </Grid>
+              <Grid size={{ xs: 12, sm: 6 }}>
+                <WarehouseField
+                  value={editForm.warehouse}
+                  onChange={(value) => setEditForm((prev) => (prev ? { ...prev, warehouse: value } : prev))}
+                />
+              </Grid>
+              <Grid size={{ xs: 12, sm: 6 }}>
+                <TextField
+                  label="Toplam Alan (m²)"
+                  value={(editingRow?.totalArea ?? 0).toLocaleString('tr-TR')}
+                  fullWidth
+                  disabled
+                  helperText="Plakalar eklendikçe otomatik hesaplanır."
+                />
+              </Grid>
+              <Grid size={12}>
+                <TextField
+                  label="Açıklama"
+                  value={editForm.description}
+                  onChange={handleEditChange('description')}
+                  multiline
+                  minRows={2}
+                  fullWidth
+                />
+              </Grid>
               {canSeeCost && (
                 <>
-                  <Stack direction="row" spacing={2}>
+                  <SectionTitle>3. Maliyet Bilgileri</SectionTitle>
+                  <Grid size={{ xs: 12, sm: 6 }}>
                     <TextField
                       label="Birim Maliyet (m²)"
                       value={editForm.unitCost}
@@ -702,6 +962,8 @@ export function IncomingStockPage() {
                         },
                       }}
                     />
+                  </Grid>
+                  <Grid size={{ xs: 12, sm: 6 }}>
                     <TextField
                       select
                       label="Maliyet Para Birimi"
@@ -717,51 +979,193 @@ export function IncomingStockPage() {
                         </MenuItem>
                       ))}
                     </TextField>
-                  </Stack>
-                  <TextField
-                    label="Gümrük Maliyeti"
-                    value={editForm.customsCost}
-                    onChange={handleEditChange('customsCost')}
-                    fullWidth
-                    slotProps={{
-                      input: { endAdornment: <InputAdornment position="end">{editForm.costCurrency}</InputAdornment> },
-                    }}
-                  />
-                  <TextField
-                    label="Nakliye Maliyeti"
-                    value={editForm.shippingCost}
-                    onChange={handleEditChange('shippingCost')}
-                    fullWidth
-                    slotProps={{
-                      input: { endAdornment: <InputAdornment position="end">{editForm.costCurrency}</InputAdornment> },
-                    }}
-                  />
-                  <TextField
-                    label="Diğer Maliyet"
-                    value={editForm.otherCost}
-                    onChange={handleEditChange('otherCost')}
-                    fullWidth
-                    slotProps={{
-                      input: { endAdornment: <InputAdornment position="end">{editForm.costCurrency}</InputAdornment> },
-                    }}
-                  />
-                  <TextField
-                    label="Toplam Ek Maliyet"
-                    value={totalAdditionalCost(
-                      editForm.customsCost,
-                      editForm.shippingCost,
-                      editForm.otherCost,
-                    ).toLocaleString('tr-TR')}
-                    fullWidth
-                    disabled
-                    slotProps={{
-                      input: { endAdornment: <InputAdornment position="end">{editForm.costCurrency}</InputAdornment> },
-                    }}
-                  />
+                  </Grid>
+                  <Grid size={{ xs: 12, sm: 6 }}>
+                    <TextField
+                      label="Gümrük Maliyeti"
+                      value={editForm.customsCost}
+                      onChange={handleEditChange('customsCost')}
+                      fullWidth
+                      slotProps={{
+                        input: { endAdornment: <InputAdornment position="end">{editForm.costCurrency}</InputAdornment> },
+                      }}
+                    />
+                  </Grid>
+                  <Grid size={{ xs: 12, sm: 6 }}>
+                    <TextField
+                      label="Nakliye Maliyeti"
+                      value={editForm.shippingCost}
+                      onChange={handleEditChange('shippingCost')}
+                      fullWidth
+                      slotProps={{
+                        input: { endAdornment: <InputAdornment position="end">{editForm.costCurrency}</InputAdornment> },
+                      }}
+                    />
+                  </Grid>
+                  <Grid size={{ xs: 12, sm: 6 }}>
+                    <TextField
+                      label="Diğer Maliyet"
+                      value={editForm.otherCost}
+                      onChange={handleEditChange('otherCost')}
+                      fullWidth
+                      slotProps={{
+                        input: { endAdornment: <InputAdornment position="end">{editForm.costCurrency}</InputAdornment> },
+                      }}
+                    />
+                  </Grid>
+                  <Grid size={{ xs: 12, sm: 6 }}>
+                    <TextField
+                      label="Toplam Ek Maliyet"
+                      value={totalAdditionalCost(
+                        editForm.customsCost,
+                        editForm.shippingCost,
+                        editForm.otherCost,
+                      ).toLocaleString('tr-TR')}
+                      fullWidth
+                      disabled
+                      slotProps={{
+                        input: { endAdornment: <InputAdornment position="end">{editForm.costCurrency}</InputAdornment> },
+                      }}
+                    />
+                  </Grid>
+                  {editForm.costCurrency !== 'TRY' && (
+                    <>
+                      <SectionTitle>4. Kur Bilgileri</SectionTitle>
+                      <Grid size={{ xs: 12, sm: 6 }}>
+                        <TextField
+                          label="Geliş Tarihi Kur Bilgisi"
+                          value={
+                            editRateOverrideEnabled
+                              ? editRateOverride
+                              : (editFetchedArrivalRate?.toLocaleString('tr-TR', { maximumFractionDigits: 4 }) ?? '')
+                          }
+                          onChange={(e) => setEditRateOverride(e.target.value)}
+                          disabled={!editRateOverrideEnabled}
+                          fullWidth
+                          placeholder={editHistoricalRateQuery.isFetching ? 'Kur alınıyor…' : undefined}
+                          helperText={
+                            editHistoricalRateQuery.data?.date
+                              ? `TCMB, ${editHistoricalRateQuery.data.date} tarihli kur (1 ${editForm.costCurrency} → TRY)`
+                              : !editHistoricalRateQuery.isFetching
+                                ? 'Kur alınamadı; elle girebilirsiniz.'
+                                : undefined
+                          }
+                          slotProps={{
+                            input: { endAdornment: <InputAdornment position="end">TRY</InputAdornment> },
+                          }}
+                        />
+                      </Grid>
+                      <Grid size={{ xs: 12, sm: 6 }} sx={{ display: 'flex', alignItems: 'center' }}>
+                        <FormControlLabel
+                          control={
+                            <Switch
+                              checked={editRateOverrideEnabled}
+                              onChange={(e) => {
+                                const checked = e.target.checked
+                                setEditRateOverrideEnabled(checked)
+                                if (checked) {
+                                  setEditRateOverride(
+                                    editFetchedArrivalRate != null ? String(editFetchedArrivalRate) : '',
+                                  )
+                                }
+                              }}
+                            />
+                          }
+                          label="Kuru Değiştir"
+                        />
+                      </Grid>
+                      <Grid size={{ xs: 12, sm: 6 }}>
+                        <TextField
+                          label="Güncel Kur (TCMB)"
+                          value={
+                            getRateForCurrency(editForm.costCurrency, ratesQuery.data)?.toLocaleString('tr-TR', {
+                              maximumFractionDigits: 4,
+                            }) ?? ''
+                          }
+                          fullWidth
+                          disabled
+                          helperText={
+                            ratesQuery.data?.date
+                              ? `TCMB, ${ratesQuery.data.date} tarihli güncel kur (1 ${editForm.costCurrency} → TRY)`
+                              : 'Güncel kur alınamadı.'
+                          }
+                          slotProps={{
+                            input: { endAdornment: <InputAdornment position="end">TRY</InputAdornment> },
+                          }}
+                        />
+                      </Grid>
+                    </>
+                  )}
+
+                  <SectionTitle>5. Satış Fiyatlandırması</SectionTitle>
+                  <Grid size={{ xs: 12, sm: 6 }}>
+                    <TextField
+                      label="Satış Maliyeti"
+                      value={editRawTotal.toLocaleString('tr-TR', { maximumFractionDigits: 2 })}
+                      fullWidth
+                      disabled
+                      helperText="Birim Maliyet + (Toplam Ek Maliyet ÷ Toplam Alan m²)."
+                      slotProps={{
+                        input: { endAdornment: <InputAdornment position="end">{editForm.costCurrency}</InputAdornment> },
+                      }}
+                    />
+                  </Grid>
+                  {editForm.costCurrency !== 'TRY' && (
+                    <>
+                      <Grid size={{ xs: 12, sm: 6 }}>
+                        <TextField
+                          label="Satış Maliyeti (Güncel Kura Göre)"
+                      value={editSaleCostLive.value.toLocaleString('tr-TR', { maximumFractionDigits: 2 })}
+                      fullWidth
+                      disabled
+                      helperText={
+                        editSaleCostLive.converted
+                          ? "Bugünün TCMB kuruyla TRY'ye çevrilir."
+                          : 'Güncel kur alınamadı; Maliyet Para Biriminde gösteriliyor.'
+                      }
+                      slotProps={{
+                        input: {
+                          endAdornment: (
+                            <InputAdornment position="end">
+                              {editSaleCostLive.converted ? 'TRY' : editForm.costCurrency}
+                            </InputAdornment>
+                          ),
+                        },
+                      }}
+                    />
+                  </Grid>
+                  <Grid size={{ xs: 12, sm: 6 }}>
+                    <TextField
+                      label="Satış Maliyeti (Geliş Kuruna Göre)"
+                      value={editSaleCostArrival.value.toLocaleString('tr-TR', { maximumFractionDigits: 2 })}
+                      fullWidth
+                      disabled
+                      helperText={
+                        editSaleCostArrival.converted
+                          ? 'Geliş Tarihi Kur Bilgisi kullanılarak TRY karşılığı hesaplanır.'
+                          : 'Geliş tarihi kuru alınamadı; Maliyet Para Biriminde gösteriliyor.'
+                      }
+                      slotProps={{
+                        input: {
+                          endAdornment: (
+                            <InputAdornment position="end">
+                              {editSaleCostArrival.converted ? 'TRY' : editForm.costCurrency}
+                            </InputAdornment>
+                          ),
+                        },
+                      }}
+                    />
+                  </Grid>
                 </>
               )}
-              {editError && <Alert severity="error">{editError}</Alert>}
-            </Stack>
+              </>
+            )}
+              {editError && (
+                <Grid size={12}>
+                  <Alert severity="error">{editError}</Alert>
+                </Grid>
+              )}
+            </Grid>
           )}
         </DialogContent>
         <DialogActions>
@@ -772,7 +1176,7 @@ export function IncomingStockPage() {
             onClick={() =>
               editingRow &&
               editForm &&
-              updateMutation.mutate({ id: editingRow.id, payload: editForm, saleCost: editSaleCost.value })
+              updateMutation.mutate({ id: editingRow.id, payload: editForm, saleCost: editRawTotal })
             }
           >
             Kaydet

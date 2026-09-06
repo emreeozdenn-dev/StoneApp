@@ -80,6 +80,11 @@ public sealed class IncomingStockController : ControllerBase
             return BadRequest(new { message = "Geçersiz taş." });
         }
 
+        if (request.BundleCount < 0)
+        {
+            return BadRequest(new { message = "Gelen Bundle Sayısı negatif olamaz." });
+        }
+
         var userId = int.Parse(User.FindFirst(ClaimTypes.NameIdentifier)!.Value);
         var batchCode = await GenerateNextBatchCodeAsync(ct);
 
@@ -90,6 +95,7 @@ public sealed class IncomingStockController : ControllerBase
             SupplyType = Enum.Parse<SupplyType>(request.SupplyType),
             Supplier = request.Supplier,
             BatchCode = batchCode,
+            BundleCount = request.BundleCount,
             Quantity = request.Quantity,
             Thickness = request.Thickness,
             Texture = request.Texture,
@@ -127,9 +133,27 @@ public sealed class IncomingStockController : ControllerBase
             return NotFound();
         }
 
+        if (request.BundleCount < 0)
+        {
+            return BadRequest(new { message = "Gelen Bundle Sayısı negatif olamaz." });
+        }
+
+        var maxAssignedBundle = await _db.Plates
+            .Where(p => p.IncomingStockId == id && p.BundleNumber != null)
+            .Select(p => (int?)p.BundleNumber)
+            .MaxAsync(ct);
+        if (maxAssignedBundle is not null && request.BundleCount < maxAssignedBundle.Value)
+        {
+            return Conflict(new
+            {
+                message = $"Bu partiden {maxAssignedBundle.Value}. bundle'a plaka atanmış; Gelen Bundle Sayısı bunun altına düşürülemez.",
+            });
+        }
+
         incomingStock.ArrivalDate = request.ArrivalDate;
         incomingStock.SupplyType = Enum.Parse<SupplyType>(request.SupplyType);
         incomingStock.Supplier = request.Supplier;
+        incomingStock.BundleCount = request.BundleCount;
         incomingStock.Quantity = request.Quantity;
         incomingStock.Thickness = request.Thickness;
         incomingStock.Texture = request.Texture;
@@ -208,7 +232,7 @@ public sealed class IncomingStockController : ControllerBase
         {
             return new IncomingStockAdminDto(
                 i.Id, i.StoneId, i.Stone.Name, i.ArrivalDate, i.SupplyType.ToString(), i.Supplier,
-                i.BatchCode, i.Quantity, i.Thickness, i.Texture, i.Warehouse, i.SaleCurrency.ToString(),
+                i.BatchCode, i.BundleCount, i.Quantity, i.Thickness, i.Texture, i.Warehouse, i.SaleCurrency.ToString(),
                 saleCost, i.Description,
                 $"{i.CreatedByUser.FirstName} {i.CreatedByUser.LastName}", i.PlateCountAdded, i.TotalArea,
                 i.CreatedAt, i.UnitCost, i.CostCurrency.ToString(),
@@ -217,7 +241,7 @@ public sealed class IncomingStockController : ControllerBase
 
         return new IncomingStockDto(
             i.Id, i.StoneId, i.Stone.Name, i.ArrivalDate, i.SupplyType.ToString(), i.Supplier,
-            i.BatchCode, i.Quantity, i.Thickness, i.Texture, i.Warehouse, i.SaleCurrency.ToString(),
+            i.BatchCode, i.BundleCount, i.Quantity, i.Thickness, i.Texture, i.Warehouse, i.SaleCurrency.ToString(),
             saleCost, i.Description,
             $"{i.CreatedByUser.FirstName} {i.CreatedByUser.LastName}", i.PlateCountAdded, i.TotalArea, i.CreatedAt);
     }

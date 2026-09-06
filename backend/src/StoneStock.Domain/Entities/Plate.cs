@@ -11,6 +11,7 @@ public sealed class Plate
     public Stone Stone { get; set; } = null!;
     public int IncomingStockId { get; set; }
     public IncomingStock IncomingStock { get; set; } = null!;
+    public int? BundleNumber { get; set; }
     public string Texture { get; set; } = string.Empty;
     public decimal Thickness { get; set; }
     public decimal Width { get; set; }
@@ -19,6 +20,7 @@ public sealed class Plate
     public string Warehouse { get; set; } = string.Empty;
     public PlateStatus Status { get; set; } = PlateStatus.Aktif;
     public decimal? SaleAmount { get; set; }
+    public Currency? SaleAmountCurrency { get; set; }
     public DateTimeOffset? SoldAt { get; set; }
     public int? SoldByUserId { get; set; }
     public User? SoldByUser { get; set; }

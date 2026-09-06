@@ -70,7 +70,8 @@ public sealed class QrScanController : ControllerBase
         }
 
         var rates = await _exchangeRateService.GetRatesAsync(ct);
-        return Ok(new QrScanResponse(result.ToString(), PlatesController.Map(plate, HasCostPermission(), rates)));
+        var arrivalRates = await _exchangeRateService.GetRatesForDateAsync(plate.IncomingStock.ArrivalDate, ct);
+        return Ok(new QrScanResponse(result.ToString(), PlatesController.Map(plate, HasCostPermission(), rates, arrivalRates)));
     }
 
     [HttpGet("history")]

@@ -24,6 +24,9 @@ public sealed class AppDbContext : DbContext
     public DbSet<AuditLog> AuditLogs => Set<AuditLog>();
     public DbSet<TextureOption> TextureOptions => Set<TextureOption>();
     public DbSet<WarehouseOption> WarehouseOptions => Set<WarehouseOption>();
+    public DbSet<ColorOption> ColorOptions => Set<ColorOption>();
+    public DbSet<Offer> Offers => Set<Offer>();
+    public DbSet<OfferItem> OfferItems => Set<OfferItem>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -87,6 +90,7 @@ public sealed class AppDbContext : DbContext
             e.Property(p => p.Height).HasColumnType("numeric(8,2)");
             e.Property(p => p.Area).HasColumnType("numeric(12,4)");
             e.Property(p => p.SaleAmount).HasColumnType("numeric(14,2)");
+            e.Property(p => p.SaleAmountCurrency).HasConversion<string>();
             e.HasOne(p => p.Stone).WithMany(s => s.Plates).HasForeignKey(p => p.StoneId);
             e.HasOne(p => p.IncomingStock).WithMany(i => i.Plates).HasForeignKey(p => p.IncomingStockId);
             e.HasOne(p => p.SoldByUser).WithMany().HasForeignKey(p => p.SoldByUserId);
@@ -110,6 +114,25 @@ public sealed class AppDbContext : DbContext
             e.HasOne(a => a.User).WithMany().HasForeignKey(a => a.UserId);
         });
 
+        modelBuilder.Entity<Offer>(e =>
+        {
+            e.Property(o => o.Currency).HasConversion<string>();
+            e.Property(o => o.UsdRate).HasColumnType("numeric(14,4)");
+            e.Property(o => o.TotalAmount).HasColumnType("numeric(14,2)");
+            e.HasOne(o => o.CreatedByUser).WithMany().HasForeignKey(o => o.CreatedByUserId);
+        });
+
+        modelBuilder.Entity<OfferItem>(e =>
+        {
+            e.Property(i => i.WidthCm).HasColumnType("numeric(8,2)");
+            e.Property(i => i.HeightCm).HasColumnType("numeric(8,2)");
+            e.Property(i => i.ThicknessCm).HasColumnType("numeric(8,2)");
+            e.Property(i => i.AreaM2).HasColumnType("numeric(12,4)");
+            e.Property(i => i.UnitPrice).HasColumnType("numeric(14,2)");
+            e.Property(i => i.LineTotal).HasColumnType("numeric(14,2)");
+            e.HasOne(i => i.Offer).WithMany(o => o.Items).HasForeignKey(i => i.OfferId);
+        });
+
         modelBuilder.Entity<TextureOption>(e =>
         {
             e.HasIndex(t => t.Name).IsUnique();
@@ -129,6 +152,24 @@ public sealed class AppDbContext : DbContext
                 new WarehouseOption { Id = 1, Name = "Depo A" },
                 new WarehouseOption { Id = 2, Name = "Depo B" },
                 new WarehouseOption { Id = 3, Name = "Depo C" });
+        });
+
+        modelBuilder.Entity<ColorOption>(e =>
+        {
+            e.HasIndex(c => c.Name).IsUnique();
+            e.HasData(
+                new ColorOption { Id = 1, Name = "Beyaz" },
+                new ColorOption { Id = 2, Name = "Siyah" },
+                new ColorOption { Id = 3, Name = "Gri" },
+                new ColorOption { Id = 4, Name = "Bej" },
+                new ColorOption { Id = 5, Name = "Krem" },
+                new ColorOption { Id = 6, Name = "Kahverengi" },
+                new ColorOption { Id = 7, Name = "Kırmızı" },
+                new ColorOption { Id = 8, Name = "Yeşil" },
+                new ColorOption { Id = 9, Name = "Sarı" },
+                new ColorOption { Id = 10, Name = "Pembe" },
+                new ColorOption { Id = 11, Name = "Mavi" },
+                new ColorOption { Id = 12, Name = "Mor" });
         });
 
         SeedRbac(modelBuilder);
@@ -154,11 +195,13 @@ public sealed class AppDbContext : DbContext
             PermissionKeys.IncomingStockView, PermissionKeys.IncomingStockCreate, PermissionKeys.IncomingStockEdit,
             PermissionKeys.PlatesView, PermissionKeys.PlatesCreate, PermissionKeys.PlatesEdit,
             PermissionKeys.CostSaleView, PermissionKeys.NotificationsView,
+            PermissionKeys.OffersView, PermissionKeys.OffersCreate,
         };
         var goruntuleyiciKeys = new[]
         {
             PermissionKeys.StonesView, PermissionKeys.IncomingStockView, PermissionKeys.PlatesView,
             PermissionKeys.CostSaleView, PermissionKeys.NotificationsView,
+            PermissionKeys.OffersView,
         };
 
         var rolePermissions = new List<RolePermission>();

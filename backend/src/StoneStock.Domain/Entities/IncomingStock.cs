@@ -11,6 +11,7 @@ public sealed class IncomingStock
     public SupplyType SupplyType { get; set; }
     public string Supplier { get; set; } = string.Empty;
     public string BatchCode { get; set; } = string.Empty;
+    public int BundleCount { get; set; }
     public decimal Quantity { get; set; }
     public decimal Thickness { get; set; }
     public string Texture { get; set; } = string.Empty;

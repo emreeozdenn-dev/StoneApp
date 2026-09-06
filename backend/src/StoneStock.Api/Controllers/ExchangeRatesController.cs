@@ -23,4 +23,11 @@ public sealed class ExchangeRatesController : ControllerBase
         var rates = await _exchangeRateService.GetRatesAsync(ct);
         return Ok(rates);
     }
+
+    [HttpGet("historical")]
+    public async Task<IActionResult> GetHistorical([FromQuery] DateOnly date, CancellationToken ct)
+    {
+        var rates = await _exchangeRateService.GetRatesForDateAsync(date, ct);
+        return Ok(rates);
+    }
 }

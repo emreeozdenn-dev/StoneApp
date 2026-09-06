@@ -7,29 +7,7 @@ public record PlateDto(
     int StoneId,
     string StoneName,
     int IncomingStockId,
-    string Texture,
-    decimal Thickness,
-    decimal Width,
-    decimal Height,
-    decimal Area,
-    string Warehouse,
-    string Status,
-    decimal? SaleCost,
-    string SaleCurrency,
-    decimal? SaleAmount,
-    DateTimeOffset? SoldAt,
-    string? SoldByUserName,
-    string QrToken,
-    DateTimeOffset CreatedAt,
-    string? ImageUrl);
-
-public sealed record PlateAdminDto(
-    int Id,
-    string PlateNo,
-    string BatchCode,
-    int StoneId,
-    string StoneName,
-    int IncomingStockId,
+    int? BundleNumber,
     string Texture,
     decimal Thickness,
     decimal Width,
@@ -45,22 +23,53 @@ public sealed record PlateAdminDto(
     string QrToken,
     DateTimeOffset CreatedAt,
     string? ImageUrl,
+    string? SaleAmountCurrency);
+
+public sealed record PlateAdminDto(
+    int Id,
+    string PlateNo,
+    string BatchCode,
+    int StoneId,
+    string StoneName,
+    int IncomingStockId,
+    int? BundleNumber,
+    string Texture,
+    decimal Thickness,
+    decimal Width,
+    decimal Height,
+    decimal Area,
+    string Warehouse,
+    string Status,
+    decimal? SaleCost,
+    string SaleCurrency,
+    decimal? SaleAmount,
+    DateTimeOffset? SoldAt,
+    string? SoldByUserName,
+    string QrToken,
+    DateTimeOffset CreatedAt,
+    string? ImageUrl,
+    string? SaleAmountCurrency,
     decimal UnitCost,
-    string CostCurrency)
-    : PlateDto(Id, PlateNo, BatchCode, StoneId, StoneName, IncomingStockId, Texture, Thickness, Width, Height,
-        Area, Warehouse, Status, SaleCost, SaleCurrency, SaleAmount, SoldAt, SoldByUserName, QrToken, CreatedAt, ImageUrl);
+    string CostCurrency,
+    decimal? SaleCostLiveRateTry,
+    decimal? SaleCostArrivalRateTry)
+    : PlateDto(Id, PlateNo, BatchCode, StoneId, StoneName, IncomingStockId, BundleNumber, Texture, Thickness, Width, Height,
+        Area, Warehouse, Status, SaleCost, SaleCurrency, SaleAmount, SoldAt, SoldByUserName, QrToken, CreatedAt, ImageUrl,
+        SaleAmountCurrency);
 
 public sealed record CreatePlateRequest(
     int StoneId,
     int IncomingStockId,
+    int? BundleNumber,
     decimal Width,
     decimal Height,
     string Warehouse);
 
 public sealed record UpdatePlateRequest(
     string PlateNo,
+    int? BundleNumber,
     decimal Width,
     decimal Height,
     string Warehouse);
 
-public sealed record MarkPlateSoldRequest(decimal? SaleAmount);
+public sealed record MarkPlateSoldRequest(decimal? SaleAmount, string? SaleCurrency);

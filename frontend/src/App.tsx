@@ -17,6 +17,7 @@ import { NotificationsPage } from './pages/Notifications/NotificationsPage'
 import { SystemSettingsPage } from './pages/Settings/SystemSettingsPage'
 import { AuditLogPage } from './pages/AuditLog/AuditLogPage'
 import { MyAccountPage } from './pages/Account/MyAccountPage'
+import { OffersPage } from './pages/Offers/OffersPage'
 
 function App() {
   return (
@@ -42,6 +43,9 @@ function App() {
           </Route>
           <Route element={<ProtectedRoute permission="notifications.view" />}>
             <Route path="/bildirim-gecmisi" element={<NotificationsPage />} />
+          </Route>
+          <Route element={<ProtectedRoute permission="offers.view" />}>
+            <Route path="/teklifler" element={<OffersPage />} />
           </Route>
 
           <Route element={<ProtectedRoute permission="users.manage" />}>

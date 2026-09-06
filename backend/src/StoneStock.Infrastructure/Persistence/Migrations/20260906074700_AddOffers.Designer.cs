@@ -2,6 +2,7 @@
 using System;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 using StoneStock.Infrastructure.Persistence;
@@ -11,9 +12,11 @@ using StoneStock.Infrastructure.Persistence;
 namespace StoneStock.Infrastructure.Persistence.Migrations
 {
     [DbContext(typeof(AppDbContext))]
-    partial class AppDbContextModelSnapshot : ModelSnapshot
+    [Migration("20260906074700_AddOffers")]
+    partial class AddOffers
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder
@@ -319,17 +322,11 @@ namespace StoneStock.Infrastructure.Persistence.Migrations
                     b.Property<string>("DeliveryMethod")
                         .HasColumnType("text");
 
-                    b.Property<bool>("IsSold")
-                        .HasColumnType("boolean");
-
                     b.Property<DateOnly>("OfferDate")
                         .HasColumnType("date");
 
                     b.Property<bool>("ShippingIncluded")
                         .HasColumnType("boolean");
-
-                    b.Property<DateTimeOffset?>("SoldAt")
-                        .HasColumnType("timestamp with time zone");
 
                     b.Property<decimal>("TotalAmount")
                         .HasColumnType("numeric(14,2)");
@@ -373,15 +370,9 @@ namespace StoneStock.Infrastructure.Persistence.Migrations
                     b.Property<int?>("PlateId")
                         .HasColumnType("integer");
 
-                    b.Property<string>("PlateIds")
-                        .HasColumnType("text");
-
                     b.Property<string>("PlateNo")
                         .IsRequired()
                         .HasColumnType("text");
-
-                    b.Property<int>("Quantity")
-                        .HasColumnType("integer");
 
                     b.Property<string>("StoneName")
                         .IsRequired()
