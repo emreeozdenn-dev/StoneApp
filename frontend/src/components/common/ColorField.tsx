@@ -43,9 +43,9 @@ export function ColorField({ value, onChange }: ColorFieldProps) {
           }
         })
       }}
-      renderTags={(tagValue, getTagProps) =>
-        tagValue.map((option, index) => {
-          const { key, ...rest } = getTagProps({ index })
+      renderValue={(value, getItemProps) =>
+        value.map((option, index) => {
+          const { key, ...rest } = getItemProps({ index })
           return <Chip label={option} size="small" key={key} {...rest} />
         })
       }
