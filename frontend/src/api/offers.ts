@@ -88,3 +88,24 @@ export async function markOfferSold(id: number) {
   const { data } = await apiClient.post(`/offers/${id}/mark-sold`)
   return data as { message: string }
 }
+
+export interface SendOfferEmailPayload {
+  to: string
+  cc: string
+  subject: string
+  htmlBody: string
+  pdf: Blob
+}
+
+export async function sendOfferEmail(payload: SendOfferEmailPayload) {
+  const formData = new FormData()
+  formData.append('to', payload.to)
+  if (payload.cc) formData.append('cc', payload.cc)
+  formData.append('subject', payload.subject)
+  formData.append('htmlBody', payload.htmlBody)
+  formData.append('pdf', payload.pdf, 'teklif.pdf')
+  const { data } = await apiClient.post('/offers/send-email', formData, {
+    headers: { 'Content-Type': 'multipart/form-data' },
+  })
+  return data as { message: string }
+}

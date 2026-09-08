@@ -60,8 +60,9 @@ export async function exportPlateInfoPdf(cardElements: HTMLElement[], fileName =
 
 // Teklif önizlemesi tek bir belge olduğu için (taş başına ayrı sayfa değil), uzun
 // içerik gerektiğinde ekran görüntüsü dikey olarak sayfa yüksekliği kadar dilimlenip
-// birden fazla sayfaya bölünür.
-export async function exportOfferPdf(containerElement: HTMLElement, fileName = 'teklif.pdf') {
+// birden fazla sayfaya bölünür. İndirme (exportOfferPdf) ve e-posta eki (generateOfferPdfBlob)
+// aynı belge üretimini paylaşır.
+async function buildOfferPdf(containerElement: HTMLElement): Promise<jsPDF> {
   const canvas = await html2canvas(containerElement, { useCORS: true, backgroundColor: '#ffffff', scale: 2 })
   const pdf = new jsPDF({ unit: 'mm', format: 'a4', orientation: 'portrait' })
   const pageWidth = pdf.internal.pageSize.getWidth()
@@ -96,7 +97,17 @@ export async function exportOfferPdf(containerElement: HTMLElement, fileName = '
     pageIndex++
   }
 
+  return pdf
+}
+
+export async function exportOfferPdf(containerElement: HTMLElement, fileName = 'teklif.pdf') {
+  const pdf = await buildOfferPdf(containerElement)
   pdf.save(fileName)
+}
+
+export async function generateOfferPdfBlob(containerElement: HTMLElement): Promise<Blob> {
+  const pdf = await buildOfferPdf(containerElement)
+  return pdf.output('blob')
 }
 
 export function buildPlateInfoWhatsAppText(items: PlateInfoItem[]): string {
@@ -143,9 +154,11 @@ export async function exportPlateInfoJpeg(cardElements: HTMLElement[], fileNameP
 
 export type ShareJpegToWhatsAppResult = 'shared' | 'cancelled' | 'unsupported'
 
+// Fotoğraf + tablo bilgisi zaten JPEG'in içinde olduğu için ayrıca metin (caption)
+// gönderilmez — aksi halde WhatsApp'ta aynı bilgiler hem görselde hem altında tekrar
+// yazı olarak görünürdü.
 export async function sharePlateInfoJpegToWhatsApp(
   cardElements: HTMLElement[],
-  items: PlateInfoItem[],
   fileNamePrefix = 'plaka-bilgisi',
 ): Promise<ShareJpegToWhatsAppResult> {
   const files: File[] = []
@@ -165,7 +178,7 @@ export async function sharePlateInfoJpegToWhatsApp(
 
   if (nav.canShare && nav.share && nav.canShare({ files })) {
     try {
-      await nav.share({ files, title: 'Plaka Bilgisi', text: buildPlateInfoWhatsAppText(items) })
+      await nav.share({ files, title: 'Plaka Bilgisi' })
       return 'shared'
     } catch (err) {
       if (err instanceof Error && err.name === 'AbortError') return 'cancelled'

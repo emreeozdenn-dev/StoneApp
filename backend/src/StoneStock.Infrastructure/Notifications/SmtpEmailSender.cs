@@ -17,7 +17,8 @@ public sealed class SmtpEmailSender : IEmailSender
     private static readonly TimeSpan OperationTimeout = TimeSpan.FromSeconds(30);
 
     public async Task<(bool Success, string? Error)> SendAsync(
-        SmtpSendOptions options, string to, string subject, string htmlBody, CancellationToken ct)
+        SmtpSendOptions options, string to, string subject, string htmlBody, CancellationToken ct,
+        string? cc = null, IReadOnlyList<EmailAttachment>? attachments = null)
     {
         using var timeoutCts = CancellationTokenSource.CreateLinkedTokenSource(ct);
         timeoutCts.CancelAfter(OperationTimeout);
@@ -28,8 +29,24 @@ public sealed class SmtpEmailSender : IEmailSender
             var message = new MimeMessage();
             message.From.Add(new MailboxAddress(options.SenderName, options.SenderEmail));
             message.To.Add(MailboxAddress.Parse(to));
+            if (!string.IsNullOrWhiteSpace(cc))
+            {
+                foreach (var address in cc.Split(',', ';', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries))
+                {
+                    message.Cc.Add(MailboxAddress.Parse(address));
+                }
+            }
             message.Subject = subject;
-            message.Body = new BodyBuilder { HtmlBody = htmlBody }.ToMessageBody();
+
+            var bodyBuilder = new BodyBuilder { HtmlBody = htmlBody };
+            if (attachments is not null)
+            {
+                foreach (var attachment in attachments)
+                {
+                    bodyBuilder.Attachments.Add(attachment.FileName, attachment.Content, ContentType.Parse(attachment.ContentType));
+                }
+            }
+            message.Body = bodyBuilder.ToMessageBody();
 
             using var client = new SmtpClient { Timeout = (int)OperationTimeout.TotalMilliseconds };
             var socketOptions = options.UseSsl ? SecureSocketOptions.StartTlsWhenAvailable : SecureSocketOptions.None;

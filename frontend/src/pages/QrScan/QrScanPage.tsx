@@ -1,6 +1,6 @@
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import QrScanner from 'qr-scanner'
-import { useMutation } from '@tanstack/react-query'
+import { useMutation, useQuery } from '@tanstack/react-query'
 import {
   Alert,
   Box,
@@ -13,9 +13,18 @@ import {
   TextField,
   Typography,
 } from '@mui/material'
+import WhatsAppIcon from '@mui/icons-material/WhatsApp'
 import { scanQrCode, type QrScanResponse } from '../../api/qrScan'
-import type { Plate } from '../../api/catalog'
+import { fetchStones, type Plate } from '../../api/catalog'
 import { ImageThumbnail } from '../../components/common/ImageThumbnail'
+import { PlateInfoCard } from '../../components/common/PlateInfoCard'
+import {
+  exportPlateInfoJpeg,
+  exportPlateInfoPdf,
+  openPlateInfoWhatsApp,
+  sharePlateInfoJpegToWhatsApp,
+  type PlateInfoItem,
+} from '../../utils/plateExport'
 
 const statusColor: Record<Plate['status'], 'success' | 'warning' | 'default' | 'error'> = {
   Aktif: 'success',
@@ -91,6 +100,76 @@ export function QrScanPage() {
   const plate = response?.plate
   const showBusy = scanMutation.isPending
   const showRetry = <Button onClick={resumeScanning}>Tekrar Tara</Button>
+
+  const stonesQuery = useQuery({ queryKey: ['stones'], queryFn: fetchStones, enabled: !!plate })
+
+  const plateInfoItem = useMemo<PlateInfoItem | null>(() => {
+    if (!plate) return null
+    return {
+      plateId: plate.id,
+      plateNo: plate.plateNo,
+      stoneName: plate.stoneName,
+      widthCm: Math.round(plate.width * 10000) / 100,
+      heightCm: Math.round(plate.height * 10000) / 100,
+      thicknessCm: plate.thickness,
+      color: stonesQuery.data?.find((s) => s.id === plate.stoneId)?.color ?? '—',
+      texture: plate.texture,
+      imageUrl: plate.imageUrl,
+    }
+  }, [plate, stonesQuery.data])
+
+  const plateInfoCardRef = useRef<HTMLDivElement | null>(null)
+  const [plateInfoExporting, setPlateInfoExporting] = useState<'pdf' | 'jpeg' | 'whatsapp' | null>(null)
+  const [plateInfoExportError, setPlateInfoExportError] = useState<string | null>(null)
+
+  const getPlateInfoCardElements = () => (plateInfoCardRef.current ? [plateInfoCardRef.current] : [])
+
+  const handleExportPlateInfoPdf = async () => {
+    setPlateInfoExportError(null)
+    setPlateInfoExporting('pdf')
+    try {
+      await exportPlateInfoPdf(getPlateInfoCardElements())
+    } catch {
+      setPlateInfoExportError('PDF oluşturulamadı.')
+    } finally {
+      setPlateInfoExporting(null)
+    }
+  }
+
+  const handleExportPlateInfoJpeg = async () => {
+    setPlateInfoExportError(null)
+    setPlateInfoExporting('jpeg')
+    try {
+      await exportPlateInfoJpeg(getPlateInfoCardElements())
+    } catch {
+      setPlateInfoExportError('JPEG oluşturulamadı.')
+    } finally {
+      setPlateInfoExporting(null)
+    }
+  }
+
+  const handleShareWhatsAppPlateInfo = async () => {
+    if (!plateInfoItem) return
+    setPlateInfoExportError(null)
+    setPlateInfoExporting('whatsapp')
+    try {
+      const cardEls = getPlateInfoCardElements()
+      const result = await sharePlateInfoJpegToWhatsApp(cardEls)
+      if (result === 'unsupported') {
+        // Tarayıcı dosya paylaşımını desteklemiyor (ör. masaüstü Firefox); JPEG'i indirip
+        // WhatsApp'ı metinle açan eski yönteme geri dönülür, kullanıcı dosyayı elle ekler.
+        await exportPlateInfoJpeg(cardEls)
+        openPlateInfoWhatsApp([plateInfoItem])
+        setPlateInfoExportError(
+          "Tarayıcınız doğrudan dosya paylaşımını desteklemiyor; JPEG indirildi, WhatsApp'ta ekleyerek gönderebilirsiniz.",
+        )
+      }
+    } catch {
+      setPlateInfoExportError('WhatsApp paylaşımı başarısız oldu.')
+    } finally {
+      setPlateInfoExporting(null)
+    }
+  }
 
   return (
     <Box>
@@ -211,9 +290,43 @@ export function QrScanPage() {
                 )}
               </Stack>
 
-              <Button variant="contained" sx={{ mt: 3 }} onClick={resumeScanning}>
-                Tekrar Tara
-              </Button>
+              <Stack direction="row" spacing={1.5} useFlexGap sx={{ mt: 3, flexWrap: 'wrap' }}>
+                <Button variant="contained" onClick={resumeScanning}>
+                  Tekrar Tara
+                </Button>
+                <Button
+                  variant="outlined"
+                  color="success"
+                  startIcon={<WhatsAppIcon />}
+                  disabled={!!plateInfoExporting}
+                  onClick={handleShareWhatsAppPlateInfo}
+                >
+                  {plateInfoExporting === 'whatsapp' ? 'Hazırlanıyor…' : "WhatsApp'ta Gönder"}
+                </Button>
+                <Button variant="outlined" disabled={!!plateInfoExporting} onClick={handleExportPlateInfoJpeg}>
+                  {plateInfoExporting === 'jpeg' ? 'Hazırlanıyor…' : 'JPEG İndir'}
+                </Button>
+                <Button variant="outlined" disabled={!!plateInfoExporting} onClick={handleExportPlateInfoPdf}>
+                  {plateInfoExporting === 'pdf' ? 'Hazırlanıyor…' : 'PDF İndir'}
+                </Button>
+              </Stack>
+
+              {plateInfoExportError && (
+                <Alert severity="warning" sx={{ mt: 2 }}>
+                  {plateInfoExportError}
+                </Alert>
+              )}
+
+              {plateInfoItem && (
+                <Box sx={{ position: 'fixed', top: 0, left: '-9999px', width: 420, zIndex: -1 }} aria-hidden>
+                  <PlateInfoCard
+                    item={plateInfoItem}
+                    cardRef={(el) => {
+                      plateInfoCardRef.current = el
+                    }}
+                  />
+                </Box>
+              )}
             </Paper>
           )}
 

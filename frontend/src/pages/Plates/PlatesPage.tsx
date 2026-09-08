@@ -1,4 +1,4 @@
-import { Fragment, useMemo, useRef, useState } from 'react'
+import { useMemo, useRef, useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import {
   Alert,
@@ -43,13 +43,16 @@ import {
   type Plate,
 } from '../../api/catalog'
 import { fetchExchangeRates } from '../../api/exchangeRates'
-import { createOffer } from '../../api/offers'
+import { createOffer, sendOfferEmail } from '../../api/offers'
 import { fetchCompanyBranding } from '../../api/systemSettings'
 import { hasPermission, useCurrentUser } from '../../auth/useCurrentUser'
 import { ColumnSettingsButton } from '../../components/common/ColumnSettingsButton'
 import { OfferPreviewDocument } from '../../components/common/OfferPreviewDocument'
+import { BarcodeThumbnail } from '../../components/common/BarcodeThumbnail'
 import { ImageThumbnail } from '../../components/common/ImageThumbnail'
+import { PlateInfoCard } from '../../components/common/PlateInfoCard'
 import { QrCodeThumbnail } from '../../components/common/QrCodeThumbnail'
+import { RichTextEditor } from '../../components/common/RichTextEditor'
 import { type ColumnDef, useColumnPreferences } from '../../components/common/useColumnPreferences'
 import { useDraggableColumns } from '../../components/common/useDraggableColumns'
 import { WarehouseField } from '../../components/common/WarehouseField'
@@ -58,6 +61,7 @@ import {
   exportOfferPdf,
   exportPlateInfoJpeg,
   exportPlateInfoPdf,
+  generateOfferPdfBlob,
   openPlateInfoWhatsApp,
   sharePlateInfoJpegToWhatsApp,
   type PlateInfoItem,
@@ -66,6 +70,7 @@ import {
 type PlateColumnKey =
   | 'image'
   | 'qr'
+  | 'barcode'
   | 'plateNo'
   | 'stoneName'
   | 'batchCode'
@@ -130,122 +135,6 @@ const supplyTypeColor: Record<string, 'primary' | 'info' | 'success' | 'warning'
   Diger: 'secondary',
 }
 
-function PlateInfoCard({
-  item,
-  cardRef,
-}: {
-  item: PlateInfoItem
-  cardRef?: (el: HTMLDivElement | null) => void
-}) {
-  const rows: [string, string][] = [
-    ['En x Boy:', `${item.widthCm.toLocaleString('tr-TR')} x ${item.heightCm.toLocaleString('tr-TR')} cm`],
-    ['Kalınlık:', `${item.thicknessCm.toLocaleString('tr-TR')} cm`],
-    ['Renk:', item.color],
-    ['Doku:', item.texture],
-  ]
-
-  return (
-    <Box
-      ref={cardRef}
-      sx={{
-        border: '1px solid',
-        borderColor: 'divider',
-        borderRadius: 1,
-        p: 3,
-        mb: 2,
-        bgcolor: 'background.paper',
-        textAlign: 'center',
-      }}
-    >
-      {item.imageUrl ? (
-        <Box
-          component="img"
-          src={item.imageUrl}
-          crossOrigin="anonymous"
-          alt={item.plateNo}
-          sx={{
-            maxWidth: '75%',
-            maxHeight: 420,
-            width: 'auto',
-            height: 'auto',
-            mb: 2,
-            display: 'block',
-            mx: 'auto',
-            border: '1px solid',
-            borderColor: 'divider',
-            borderRadius: 0.5,
-            p: 0.5,
-            boxSizing: 'border-box',
-          }}
-        />
-      ) : (
-        <Box
-          sx={{
-            maxWidth: '75%',
-            height: 260,
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            bgcolor: 'action.hover',
-            borderRadius: 1,
-            mb: 2,
-            mx: 'auto',
-          }}
-        >
-          <Typography variant="body2" color="text.secondary">
-            Görsel yok
-          </Typography>
-        </Box>
-      )}
-      <Typography variant="subtitle2" sx={{ fontWeight: 600, mb: 0.5 }}>
-        {item.stoneName}
-      </Typography>
-      <Box
-        sx={{
-          display: 'inline-grid',
-          gridTemplateColumns: 'auto auto',
-          border: '1px solid',
-          borderColor: 'divider',
-          borderRadius: 1,
-          overflow: 'hidden',
-        }}
-      >
-        {rows.map(([label, value], index) => (
-          <Fragment key={label}>
-            <Box
-              sx={{
-                fontSize: '0.7rem',
-                fontWeight: 700,
-                textAlign: 'right',
-                px: 1,
-                py: 0.5,
-                borderTop: index > 0 ? '1px solid' : 'none',
-                borderRight: '1px solid',
-                borderColor: 'divider',
-                bgcolor: 'action.hover',
-              }}
-            >
-              {label}
-            </Box>
-            <Box
-              sx={{
-                fontSize: '0.7rem',
-                textAlign: 'left',
-                px: 1,
-                py: 0.5,
-                borderTop: index > 0 ? '1px solid' : 'none',
-                borderColor: 'divider',
-              }}
-            >
-              {value}
-            </Box>
-          </Fragment>
-        ))}
-      </Box>
-    </Box>
-  )
-}
-
 export function PlatesPage() {
   const { user } = useCurrentUser()
   const queryClient = useQueryClient()
@@ -299,7 +188,6 @@ export function PlatesPage() {
   const plateColumns = useMemo<ColumnDef<PlateColumnKey>[]>(() => {
     const cols: ColumnDef<PlateColumnKey>[] = [
       { key: 'image', label: 'Görsel' },
-      { key: 'qr', label: 'QR' },
       { key: 'plateNo', label: 'Plaka No' },
       { key: 'stoneName', label: 'Taş' },
       { key: 'batchCode', label: 'Parti/Lot Kodu' },
@@ -309,6 +197,8 @@ export function PlatesPage() {
       { key: 'warehouse', label: 'Depo' },
       { key: 'status', label: 'Durum' },
       { key: 'supplyType', label: 'Tedarik Türü' },
+      { key: 'qr', label: 'QR' },
+      { key: 'barcode', label: 'Barkod' },
     ]
     if (canSeeCost) cols.push({ key: 'unitCost', label: 'Birim Maliyet', align: 'right' })
     cols.push({ key: 'saleCost', label: 'Satış Maliyeti', align: 'right' })
@@ -331,6 +221,18 @@ export function PlatesPage() {
         return (
           <QrCodeThumbnail
             value={p.qrToken}
+            label={{
+              plateNo: p.plateNo,
+              stoneName: p.stoneName,
+              width: metersToCm(p.width),
+              height: metersToCm(p.height),
+            }}
+          />
+        )
+      case 'barcode':
+        return (
+          <BarcodeThumbnail
+            value={p.plateNo}
             label={{
               plateNo: p.plateNo,
               stoneName: p.stoneName,
@@ -441,6 +343,11 @@ export function PlatesPage() {
   const [offerUsdRateOverride, setOfferUsdRateOverride] = useState('')
   const [mergeDecisions, setMergeDecisions] = useState<Record<string, boolean>>({})
 
+  const [offerRecipientEmail, setOfferRecipientEmail] = useState('')
+  const [offerCcEmail, setOfferCcEmail] = useState('')
+  const [offerEmailSubject, setOfferEmailSubject] = useState('Fiyat Teklifi')
+  const [offerEmailMessage, setOfferEmailMessage] = useState('')
+
   const offerBrandingQuery = useQuery({ queryKey: ['company-branding'], queryFn: fetchCompanyBranding })
   const offerRatesQuery = useQuery({ queryKey: ['exchange-rates'], queryFn: fetchExchangeRates })
   const offerFetchedUsdRate = offerRatesQuery.data?.usdTry ?? null
@@ -513,6 +420,7 @@ export function PlatesPage() {
     setOfferUsdRateOverrideEnabled(false)
     setOfferUsdRateOverride('')
     setOfferSaveSuccess(false)
+    setOfferEmailSuccess(false)
     setOfferExportError(null)
     setOfferUnitPrices({})
     setMergeDecisions({})
@@ -594,6 +502,43 @@ export function PlatesPage() {
     })
   }
 
+  const [offerEmailSuccess, setOfferEmailSuccess] = useState(false)
+
+  const sendOfferEmailMutation = useMutation({
+    mutationFn: sendOfferEmail,
+    onSuccess: () => {
+      setOfferEmailSuccess(true)
+    },
+    onError: (err: unknown) => {
+      const message =
+        (err as { response?: { data?: { message?: string } } })?.response?.data?.message ??
+        'Teklif e-postası gönderilemedi.'
+      setOfferExportError(message)
+    },
+  })
+
+  const handleSendOfferEmail = async () => {
+    setOfferExportError(null)
+    setOfferEmailSuccess(false)
+    if (!offerRecipientEmail.trim()) {
+      setOfferExportError('Alıcı e-posta adresi gerekli.')
+      return
+    }
+    if (!offerContainerRef.current) return
+    try {
+      const pdfBlob = await generateOfferPdfBlob(offerContainerRef.current)
+      sendOfferEmailMutation.mutate({
+        to: offerRecipientEmail.trim(),
+        cc: offerCcEmail.trim(),
+        subject: offerEmailSubject.trim() || 'Fiyat Teklifi',
+        htmlBody: offerEmailMessage,
+        pdf: pdfBlob,
+      })
+    } catch {
+      setOfferExportError('Teklif PDF olarak hazırlanamadı.')
+    }
+  }
+
   const plateInfoItems = useMemo<PlateInfoItem[]>(
     () =>
       selectedPlates.map((p) => ({
@@ -649,7 +594,7 @@ export function PlatesPage() {
     setPlateInfoExporting('whatsapp')
     try {
       const cardEls = getPlateInfoCardElements()
-      const result = await sharePlateInfoJpegToWhatsApp(cardEls, plateInfoItems)
+      const result = await sharePlateInfoJpegToWhatsApp(cardEls)
       if (result === 'unsupported') {
         // Tarayıcı dosya paylaşımını desteklemiyor (ör. masaüstü Firefox); JPEG'leri indirip
         // WhatsApp'ı metinle açan eski yönteme geri dönülür, kullanıcı dosyaları elle ekler.
@@ -1816,9 +1761,53 @@ export function PlatesPage() {
               }
             })}
           />
+
+          <Divider sx={{ my: 3 }} />
+
+          <Typography variant="subtitle2" sx={{ fontWeight: 600, mb: 1 }}>
+            E-posta Gönderimi
+          </Typography>
+          <Grid container spacing={2} sx={{ mb: 1 }}>
+            <Grid size={{ xs: 12, sm: 6 }}>
+              <TextField
+                label="Alıcı E-posta Adresi"
+                type="email"
+                value={offerRecipientEmail}
+                onChange={(e) => setOfferRecipientEmail(e.target.value)}
+                fullWidth
+              />
+            </Grid>
+            <Grid size={{ xs: 12, sm: 6 }}>
+              <TextField
+                label="Bilgi E-posta"
+                type="email"
+                value={offerCcEmail}
+                onChange={(e) => setOfferCcEmail(e.target.value)}
+                fullWidth
+                helperText="Birden fazla adres virgülle ayrılabilir."
+              />
+            </Grid>
+            <Grid size={12}>
+              <TextField
+                label="Konu"
+                value={offerEmailSubject}
+                onChange={(e) => setOfferEmailSubject(e.target.value)}
+                fullWidth
+              />
+            </Grid>
+            <Grid size={12}>
+              <RichTextEditor label="Mesaj" value={offerEmailMessage} onChange={setOfferEmailMessage} />
+            </Grid>
+          </Grid>
+
           {offerSaveSuccess && (
             <Alert severity="success" sx={{ mt: 2 }}>
               Teklif kaydedildi. "Satış Yönetimi &gt; Teklifler" sayfasından görüntüleyebilirsiniz.
+            </Alert>
+          )}
+          {offerEmailSuccess && (
+            <Alert severity="success" sx={{ mt: 2 }}>
+              Teklif e-postası gönderildi.
             </Alert>
           )}
           {offerExportError && (
@@ -1831,6 +1820,12 @@ export function PlatesPage() {
           <Button onClick={closeOfferDialog}>Kapat</Button>
           <Button disabled={offerExporting} onClick={handleExportOfferPdf}>
             {offerExporting ? 'Hazırlanıyor…' : 'PDF İndir'}
+          </Button>
+          <Button
+            disabled={sendOfferEmailMutation.isPending || !offerRecipientEmail.trim() || selectedPlates.length === 0}
+            onClick={handleSendOfferEmail}
+          >
+            {sendOfferEmailMutation.isPending ? 'Gönderiliyor…' : 'Teklifi E-posta Olarak Gönder'}
           </Button>
           <Button
             variant="contained"

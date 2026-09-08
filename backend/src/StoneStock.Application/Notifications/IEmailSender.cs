@@ -9,8 +9,11 @@ public sealed record SmtpSendOptions(
     string SenderEmail,
     string SenderName);
 
+public sealed record EmailAttachment(string FileName, byte[] Content, string ContentType);
+
 public interface IEmailSender
 {
     Task<(bool Success, string? Error)> SendAsync(
-        SmtpSendOptions options, string to, string subject, string htmlBody, CancellationToken ct);
+        SmtpSendOptions options, string to, string subject, string htmlBody, CancellationToken ct,
+        string? cc = null, IReadOnlyList<EmailAttachment>? attachments = null);
 }

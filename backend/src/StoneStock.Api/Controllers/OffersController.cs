@@ -1,5 +1,6 @@
 using System.Security.Claims;
 using Microsoft.AspNetCore.Authorization;
+using Microsoft.AspNetCore.DataProtection;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using StoneStock.Api.Auditing;
@@ -9,6 +10,7 @@ using StoneStock.Application.Sales;
 using StoneStock.Domain.Entities;
 using StoneStock.Domain.Enums;
 using StoneStock.Domain.Security;
+using StoneStock.Infrastructure.Notifications;
 using StoneStock.Infrastructure.Persistence;
 
 namespace StoneStock.Api.Controllers;
@@ -20,11 +22,17 @@ public sealed class OffersController : ControllerBase
 {
     private readonly AppDbContext _db;
     private readonly INotificationDispatcher _notificationDispatcher;
+    private readonly IDataProtectionProvider _dataProtectionProvider;
+    private readonly IEmailSender _emailSender;
 
-    public OffersController(AppDbContext db, INotificationDispatcher notificationDispatcher)
+    public OffersController(
+        AppDbContext db, INotificationDispatcher notificationDispatcher,
+        IDataProtectionProvider dataProtectionProvider, IEmailSender emailSender)
     {
         _db = db;
         _notificationDispatcher = notificationDispatcher;
+        _dataProtectionProvider = dataProtectionProvider;
+        _emailSender = emailSender;
     }
 
     [HttpGet]
@@ -116,6 +124,71 @@ public sealed class OffersController : ControllerBase
 
         return Ok(new { message = "Teklif kaydedildi.", id = offer.Id });
     }
+
+    [HttpPost("send-email")]
+    [Authorize(Policy = PermissionKeys.OffersCreate)]
+    [Consumes("multipart/form-data")]
+    public async Task<IActionResult> SendEmail([FromForm] SendOfferEmailForm form, CancellationToken ct)
+    {
+        if (string.IsNullOrWhiteSpace(form.To))
+        {
+            return BadRequest(new { message = "Alıcı e-posta adresi gerekli." });
+        }
+
+        if (string.IsNullOrWhiteSpace(form.Subject))
+        {
+            return BadRequest(new { message = "Konu gerekli." });
+        }
+
+        if (form.Pdf is null || form.Pdf.Length == 0)
+        {
+            return BadRequest(new { message = "Teklif PDF eki gerekli." });
+        }
+
+        var settings = await _db.SystemSettings.FirstOrDefaultAsync(ct);
+        if (settings is null || string.IsNullOrWhiteSpace(settings.SmtpHost) || settings.SmtpPort is null ||
+            string.IsNullOrWhiteSpace(settings.SmtpSenderEmail))
+        {
+            return BadRequest(new { message = "Önce Sistem Ayarları'ndan SMTP bilgilerini kaydedin." });
+        }
+
+        string? password = null;
+        if (!string.IsNullOrEmpty(settings.SmtpPasswordEncrypted))
+        {
+            try
+            {
+                password = Protector.Unprotect(settings.SmtpPasswordEncrypted);
+            }
+            catch
+            {
+                return BadRequest(new { message = "Kayıtlı SMTP şifresi çözülemedi, lütfen Sistem Ayarları'ndan yeniden girin." });
+            }
+        }
+
+        var options = new SmtpSendOptions(
+            settings.SmtpHost!, settings.SmtpPort!.Value, settings.SmtpUsername, password,
+            settings.SmtpUseSsl, settings.SmtpSenderEmail!, settings.SmtpSenderName ?? settings.SmtpSenderEmail!);
+
+        using var ms = new MemoryStream();
+        await form.Pdf.CopyToAsync(ms, ct);
+        var attachment = new EmailAttachment("teklif.pdf", ms.ToArray(), "application/pdf");
+
+        var (success, error) = await _emailSender.SendAsync(
+            options, form.To, form.Subject, form.HtmlBody ?? string.Empty, ct,
+            form.Cc, new[] { attachment });
+
+        if (!success)
+        {
+            return BadRequest(new { message = $"Teklif e-postası gönderilemedi: {error}" });
+        }
+
+        AuditLogWriter.Log(_db, User, "Sent", "Offer", form.To, $"Teklif e-postası gönderildi: {form.To}");
+        await _db.SaveChangesAsync(ct);
+
+        return Ok(new { message = "Teklif e-postası gönderildi." });
+    }
+
+    private IDataProtector Protector => _dataProtectionProvider.CreateProtector(NotificationDispatcher.SmtpProtectorName);
 
     [HttpDelete("{id:int}")]
     [Authorize(Policy = PermissionKeys.OffersDelete)]
@@ -237,4 +310,13 @@ public sealed class OffersController : ControllerBase
         o.Items.Select(i => new OfferItemDto(
             i.Id, i.PlateId, i.PlateNo, i.StoneName, i.WidthCm, i.HeightCm, i.ThicknessCm, i.Texture,
             i.AreaM2, i.UnitPrice, i.LineTotal, i.Quantity, ParsePlateIds(i.PlateIds))).ToList());
+}
+
+public sealed class SendOfferEmailForm
+{
+    public string To { get; set; } = string.Empty;
+    public string? Cc { get; set; }
+    public string Subject { get; set; } = string.Empty;
+    public string? HtmlBody { get; set; }
+    public IFormFile? Pdf { get; set; }
 }
