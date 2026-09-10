@@ -96,6 +96,7 @@ public sealed class IncomingStockController : ControllerBase
             Supplier = request.Supplier,
             BatchCode = batchCode,
             BundleCount = request.BundleCount,
+            BundleLabels = BuildBundleLabelsFromSuffixes(batchCode, request.BundleCount, request.BundleSuffixes),
             Quantity = request.Quantity,
             Thickness = request.Thickness,
             Texture = request.Texture,
@@ -154,6 +155,7 @@ public sealed class IncomingStockController : ControllerBase
         incomingStock.SupplyType = Enum.Parse<SupplyType>(request.SupplyType);
         incomingStock.Supplier = request.Supplier;
         incomingStock.BundleCount = request.BundleCount;
+        incomingStock.BundleLabels = BuildBundleLabels(incomingStock.BatchCode, request.BundleCount, request.BundleLabels);
         incomingStock.Quantity = request.Quantity;
         incomingStock.Thickness = request.Thickness;
         incomingStock.Texture = request.Texture;
@@ -220,6 +222,28 @@ public sealed class IncomingStockController : ControllerBase
         return batchCode;
     }
 
+    private static List<string> BuildBundleLabels(string batchCode, int count, IReadOnlyList<string>? fullLabels)
+    {
+        var labels = new List<string>(count);
+        for (var i = 0; i < count; i++)
+        {
+            var custom = fullLabels is not null && i < fullLabels.Count ? fullLabels[i]?.Trim() : null;
+            labels.Add(!string.IsNullOrWhiteSpace(custom) ? custom! : $"{batchCode} Bundle {i + 1}");
+        }
+        return labels;
+    }
+
+    private static List<string> BuildBundleLabelsFromSuffixes(string batchCode, int count, IReadOnlyList<string>? suffixes)
+    {
+        var labels = new List<string>(count);
+        for (var i = 0; i < count; i++)
+        {
+            var suffix = suffixes is not null && i < suffixes.Count ? suffixes[i]?.Trim() : null;
+            labels.Add(!string.IsNullOrWhiteSpace(suffix) ? $"{batchCode} {suffix}" : $"{batchCode} Bundle {i + 1}");
+        }
+        return labels;
+    }
+
     private bool HasCostPermission() =>
         User.HasClaim("permission", PermissionKeys.CostUnitView) &&
         User.HasClaim("permission", PermissionKeys.CostCurrencyView);
@@ -232,7 +256,7 @@ public sealed class IncomingStockController : ControllerBase
         {
             return new IncomingStockAdminDto(
                 i.Id, i.StoneId, i.Stone.Name, i.ArrivalDate, i.SupplyType.ToString(), i.Supplier,
-                i.BatchCode, i.BundleCount, i.Quantity, i.Thickness, i.Texture, i.Warehouse, i.SaleCurrency.ToString(),
+                i.BatchCode, i.BundleCount, i.BundleLabels, i.Quantity, i.Thickness, i.Texture, i.Warehouse, i.SaleCurrency.ToString(),
                 saleCost, i.Description,
                 $"{i.CreatedByUser.FirstName} {i.CreatedByUser.LastName}", i.PlateCountAdded, i.TotalArea,
                 i.CreatedAt, i.UnitCost, i.CostCurrency.ToString(),
@@ -241,7 +265,7 @@ public sealed class IncomingStockController : ControllerBase
 
         return new IncomingStockDto(
             i.Id, i.StoneId, i.Stone.Name, i.ArrivalDate, i.SupplyType.ToString(), i.Supplier,
-            i.BatchCode, i.BundleCount, i.Quantity, i.Thickness, i.Texture, i.Warehouse, i.SaleCurrency.ToString(),
+            i.BatchCode, i.BundleCount, i.BundleLabels, i.Quantity, i.Thickness, i.Texture, i.Warehouse, i.SaleCurrency.ToString(),
             saleCost, i.Description,
             $"{i.CreatedByUser.FirstName} {i.CreatedByUser.LastName}", i.PlateCountAdded, i.TotalArea, i.CreatedAt);
     }

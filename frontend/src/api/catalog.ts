@@ -96,6 +96,7 @@ export interface IncomingStock {
   supplier: string
   batchCode: string
   bundleCount: number
+  bundleLabels: string[]
   quantity: number
   thickness: number
   texture: string
@@ -121,6 +122,7 @@ export interface CreateIncomingStockPayload {
   supplyType: string
   supplier: string
   bundleCount: number
+  bundleSuffixes: string[]
   quantity: number
   thickness: number
   texture: string
@@ -150,6 +152,7 @@ export interface UpdateIncomingStockPayload {
   supplyType: string
   supplier: string
   bundleCount: number
+  bundleLabels: string[]
   quantity: number
   thickness: number
   texture: string

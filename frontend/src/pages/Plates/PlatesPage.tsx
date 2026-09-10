@@ -56,7 +56,7 @@ import { RichTextEditor } from '../../components/common/RichTextEditor'
 import { type ColumnDef, useColumnPreferences } from '../../components/common/useColumnPreferences'
 import { useDraggableColumns } from '../../components/common/useDraggableColumns'
 import { WarehouseField } from '../../components/common/WarehouseField'
-import { buildBundleLabels } from '../../utils/bundles'
+import { resizeBundleLabels } from '../../utils/bundles'
 import {
   exportOfferPdf,
   exportPlateInfoJpeg,
@@ -794,18 +794,20 @@ export function PlatesPage() {
     incomingQuery.data?.filter((i) => String(i.stoneId) === String(form.stoneId)) ?? []
   const selectedBatch = incomingQuery.data?.find((i) => String(i.id) === String(form.incomingStockId))
   const createBundleLabels = selectedBatch
-    ? buildBundleLabels(selectedBatch.batchCode, selectedBatch.bundleCount)
+    ? resizeBundleLabels(selectedBatch.bundleLabels ?? [], selectedBatch.bundleCount, (i) => `${selectedBatch.batchCode} Bundle ${i + 1}`)
     : []
 
   const bulkBatchesForStone =
     incomingQuery.data?.filter((i) => String(i.stoneId) === String(bulkForm.stoneId)) ?? []
   const bulkSelectedBatch = incomingQuery.data?.find((i) => String(i.id) === String(bulkForm.incomingStockId))
   const bulkBundleLabels = bulkSelectedBatch
-    ? buildBundleLabels(bulkSelectedBatch.batchCode, bulkSelectedBatch.bundleCount)
+    ? resizeBundleLabels(bulkSelectedBatch.bundleLabels ?? [], bulkSelectedBatch.bundleCount, (i) => `${bulkSelectedBatch.batchCode} Bundle ${i + 1}`)
     : []
 
   const editBatch = incomingQuery.data?.find((i) => i.id === editingPlate?.incomingStockId)
-  const editBundleLabels = editBatch ? buildBundleLabels(editBatch.batchCode, editBatch.bundleCount) : []
+  const editBundleLabels = editBatch
+    ? resizeBundleLabels(editBatch.bundleLabels ?? [], editBatch.bundleCount, (i) => `${editBatch.batchCode} Bundle ${i + 1}`)
+    : []
 
   return (
     <Box>

@@ -76,6 +76,7 @@ public sealed class AppDbContext : DbContext
             e.Property(i => i.CustomsCost).HasColumnType("numeric(14,2)");
             e.Property(i => i.ShippingCost).HasColumnType("numeric(14,2)");
             e.Property(i => i.OtherCost).HasColumnType("numeric(14,2)");
+            e.Property(i => i.BundleLabels).HasColumnType("text[]");
             e.HasOne(i => i.Stone).WithMany(s => s.IncomingStocks).HasForeignKey(i => i.StoneId);
             e.HasOne(i => i.CreatedByUser).WithMany().HasForeignKey(i => i.CreatedByUserId);
         });

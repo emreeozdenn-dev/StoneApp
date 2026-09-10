@@ -42,7 +42,7 @@ import { TextureField } from '../../components/common/TextureField'
 import { type ColumnDef, useColumnPreferences } from '../../components/common/useColumnPreferences'
 import { useDraggableColumns } from '../../components/common/useDraggableColumns'
 import { WarehouseField } from '../../components/common/WarehouseField'
-import { buildBundleLabels } from '../../utils/bundles'
+import { resizeBundleLabels } from '../../utils/bundles'
 
 type IncomingStockColumnKey =
   | 'batchCode'
@@ -62,6 +62,7 @@ const initialForm = {
   supplyType: 'Ocak',
   supplier: '',
   bundleCount: '',
+  bundleSuffixes: [] as string[],
   thickness: '',
   texture: 'Cilalı',
   warehouse: '',
@@ -78,6 +79,7 @@ interface EditForm {
   supplyType: string
   supplier: string
   bundleCount: string
+  bundleLabels: string[]
   thickness: string
   texture: string
   warehouse: string
@@ -270,15 +272,8 @@ export function IncomingStockPage() {
     [editRawTotal, editForm, editEffectiveArrivalRate],
   )
 
-  const createBundleLabels = useMemo(
-    () => buildBundleLabels('Otomatik Kod', Number(form.bundleCount) || 0),
-    [form.bundleCount],
-  )
-
-  const editBundleLabels = useMemo(
-    () => (editForm && editingRow ? buildBundleLabels(editingRow.batchCode, Number(editForm.bundleCount) || 0) : []),
-    [editForm, editingRow],
-  )
+  const createBundleLabels = form.bundleSuffixes
+  const editBundleLabels = editForm?.bundleLabels ?? []
 
   const [search, setSearch] = useState('')
   const [supplyTypeFilter, setSupplyTypeFilter] = useState('Tumu')
@@ -317,6 +312,7 @@ export function IncomingStockPage() {
         supplyType: payload.supplyType,
         supplier: payload.supplier,
         bundleCount: Number(payload.bundleCount) || 0,
+        bundleLabels: payload.bundleLabels,
         quantity: 0,
         thickness: Number(payload.thickness) || 0,
         texture: payload.texture,
@@ -365,6 +361,24 @@ export function IncomingStockPage() {
     setForm((prev) => ({ ...prev, [field]: e.target.value }))
   }
 
+  const handleBundleCountChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const value = e.target.value
+    setForm((prev) => ({
+      ...prev,
+      bundleCount: value,
+      bundleSuffixes: resizeBundleLabels(prev.bundleSuffixes, Number(value) || 0, (i) => `Bundle ${i + 1}`),
+    }))
+  }
+
+  const handleBundleSuffixChange = (index: number) => (e: React.ChangeEvent<HTMLInputElement>) => {
+    const value = e.target.value
+    setForm((prev) => {
+      const bundleSuffixes = [...prev.bundleSuffixes]
+      bundleSuffixes[index] = value
+      return { ...prev, bundleSuffixes }
+    })
+  }
+
   const openEdit = (row: IncomingStock) => {
     setEditingRow(row)
     setEditForm({
@@ -372,6 +386,7 @@ export function IncomingStockPage() {
       supplyType: row.supplyType,
       supplier: row.supplier,
       bundleCount: String(row.bundleCount ?? 0),
+      bundleLabels: resizeBundleLabels(row.bundleLabels ?? [], row.bundleCount ?? 0, (i) => `${row.batchCode} Bundle ${i + 1}`),
       thickness: String(row.thickness),
       texture: row.texture,
       warehouse: row.warehouse,
@@ -391,6 +406,33 @@ export function IncomingStockPage() {
     setEditForm((prev) => (prev ? { ...prev, [field]: e.target.value } : prev))
   }
 
+  const handleEditBundleCountChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const value = e.target.value
+    setEditForm((prev) =>
+      prev
+        ? {
+            ...prev,
+            bundleCount: value,
+            bundleLabels: resizeBundleLabels(
+              prev.bundleLabels,
+              Number(value) || 0,
+              (i) => `${editingRow?.batchCode ?? ''} Bundle ${i + 1}`,
+            ),
+          }
+        : prev,
+    )
+  }
+
+  const handleEditBundleLabelChange = (index: number) => (e: React.ChangeEvent<HTMLInputElement>) => {
+    const value = e.target.value
+    setEditForm((prev) => {
+      if (!prev) return prev
+      const bundleLabels = [...prev.bundleLabels]
+      bundleLabels[index] = value
+      return { ...prev, bundleLabels }
+    })
+  }
+
   const handleSubmit = () => {
     createMutation.mutate({
       stoneId: Number(form.stoneId),
@@ -398,6 +440,7 @@ export function IncomingStockPage() {
       supplyType: form.supplyType,
       supplier: form.supplier,
       bundleCount: Number(form.bundleCount) || 0,
+      bundleSuffixes: form.bundleSuffixes,
       quantity: 0,
       thickness: Number(form.thickness) || 0,
       texture: form.texture,
@@ -579,7 +622,7 @@ export function IncomingStockPage() {
               <TextField
                 label="Gelen Bundle Sayısı"
                 value={form.bundleCount}
-                onChange={handleChange('bundleCount')}
+                onChange={handleBundleCountChange}
                 fullWidth
               />
             </Grid>
@@ -588,15 +631,21 @@ export function IncomingStockPage() {
             </Grid>
             {createBundleLabels.length > 0 && (
               <Grid size={12}>
-                <TextField
-                  label="Bundle Kodları"
-                  value={createBundleLabels.join('\n')}
-                  fullWidth
-                  disabled
-                  multiline
-                  minRows={Math.min(createBundleLabels.length, 6)}
-                  helperText="Parti/Lot Kodu kayıt oluşturulduktan sonra kesinleşir; buradaki kod geçicidir."
-                />
+                <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mb: 0.5 }}>
+                  Bundle Kodları — Parti/Lot Kodu kayıt oluşturulduktan sonra kesinleşir, buraya girdiğiniz kısım o kodun devamına eklenir.
+                </Typography>
+                <Stack spacing={1}>
+                  {createBundleLabels.map((suffix, index) => (
+                    <TextField
+                      key={index}
+                      label={`Bundle ${index + 1}`}
+                      value={suffix}
+                      onChange={handleBundleSuffixChange(index)}
+                      fullWidth
+                      size="small"
+                    />
+                  ))}
+                </Stack>
               </Grid>
             )}
             <Grid size={{ xs: 12, sm: 6 }}>
@@ -892,7 +941,7 @@ export function IncomingStockPage() {
                 <TextField
                   label="Gelen Bundle Sayısı"
                   value={editForm.bundleCount}
-                  onChange={handleEditChange('bundleCount')}
+                  onChange={handleEditBundleCountChange}
                   fullWidth
                 />
               </Grid>
@@ -906,14 +955,21 @@ export function IncomingStockPage() {
               </Grid>
               {editBundleLabels.length > 0 && (
                 <Grid size={12}>
-                  <TextField
-                    label="Bundle Kodları"
-                    value={editBundleLabels.join('\n')}
-                    fullWidth
-                    disabled
-                    multiline
-                    minRows={Math.min(editBundleLabels.length, 6)}
-                  />
+                  <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mb: 0.5 }}>
+                    Bundle Kodları
+                  </Typography>
+                  <Stack spacing={1}>
+                    {editBundleLabels.map((label, index) => (
+                      <TextField
+                        key={index}
+                        label={`Bundle ${index + 1}`}
+                        value={label}
+                        onChange={handleEditBundleLabelChange(index)}
+                        fullWidth
+                        size="small"
+                      />
+                    ))}
+                  </Stack>
                 </Grid>
               )}
               <Grid size={{ xs: 12, sm: 6 }}>
