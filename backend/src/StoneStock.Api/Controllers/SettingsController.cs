@@ -1,10 +1,14 @@
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using StoneStock.Api.Auth;
 using StoneStock.Application.Settings;
+using StoneStock.Domain.Security;
 
 namespace StoneStock.Api.Controllers;
 
 [ApiController]
 [Route("api/settings")]
+[Authorize(AuthenticationSchemes = CookieAuth.SchemeName, Policy = PermissionKeys.SettingsManage)]
 public sealed class SettingsController : ControllerBase
 {
     private readonly IConnectionSettingsService _connectionSettingsService;
