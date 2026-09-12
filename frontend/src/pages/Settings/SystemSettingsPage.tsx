@@ -10,6 +10,8 @@ import {
   Paper,
   Stack,
   Switch,
+  Tab,
+  Tabs,
   TextField,
   Typography,
 } from '@mui/material'
@@ -609,22 +611,30 @@ function RecipientsSection() {
   )
 }
 
+const SETTINGS_TABS = ['Firma', 'E-posta (SMTP)', 'Bildirim İçerikleri', 'Alıcılar'] as const
+
 export function SystemSettingsPage() {
+  const [activeTab, setActiveTab] = useState(0)
+
   return (
-    <Box sx={{ maxWidth: 560, mx: 'auto', mt: 2, mb: 6, px: 2 }}>
+    <Box sx={{ maxWidth: 820, mx: 'auto', mt: 2, mb: 6, px: 2 }}>
       <Typography variant="h5" sx={{ fontWeight: 600 }} gutterBottom>
         Sistem Ayarları
       </Typography>
       <Typography variant="body2" color="text.secondary" sx={{ mb: 3 }}>
-        E-posta bildirimleri için SMTP sunucusunu ve alıcı listesini yapılandırın.
+        E-posta bildirimleri için SMTP sunucusunu, firma bilgilerini ve alıcı listesini yapılandırın.
       </Typography>
 
-      <Stack spacing={3}>
-        <CompanyInfoSection />
-        <SmtpSection />
-        <NotificationTemplatesSection />
-        <RecipientsSection />
-      </Stack>
+      <Tabs value={activeTab} onChange={(_, v) => setActiveTab(v)} sx={{ mb: 3, borderBottom: 1, borderColor: 'divider' }}>
+        {SETTINGS_TABS.map((label) => (
+          <Tab key={label} label={label} />
+        ))}
+      </Tabs>
+
+      {activeTab === 0 && <CompanyInfoSection />}
+      {activeTab === 1 && <SmtpSection />}
+      {activeTab === 2 && <NotificationTemplatesSection />}
+      {activeTab === 3 && <RecipientsSection />}
     </Box>
   )
 }

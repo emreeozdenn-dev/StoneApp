@@ -118,6 +118,7 @@ public sealed class AppDbContext : DbContext
         modelBuilder.Entity<Offer>(e =>
         {
             e.Property(o => o.Currency).HasConversion<string>();
+            e.Property(o => o.Status).HasConversion<string>();
             e.Property(o => o.UsdRate).HasColumnType("numeric(14,4)");
             e.Property(o => o.TotalAmount).HasColumnType("numeric(14,2)");
             e.HasOne(o => o.CreatedByUser).WithMany().HasForeignKey(o => o.CreatedByUserId);

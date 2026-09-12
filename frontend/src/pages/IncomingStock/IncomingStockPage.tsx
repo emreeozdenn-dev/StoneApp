@@ -4,6 +4,7 @@ import {
   Alert,
   Box,
   Button,
+  Chip,
   Dialog,
   DialogActions,
   DialogContent,
@@ -38,6 +39,7 @@ import { fetchStones } from '../../api/catalog'
 import { fetchExchangeRates, fetchHistoricalExchangeRates, type ExchangeRates } from '../../api/exchangeRates'
 import { hasPermission, useCurrentUser } from '../../auth/useCurrentUser'
 import { ColumnSettingsButton } from '../../components/common/ColumnSettingsButton'
+import { StatTile } from '../../components/common/StatTile'
 import { TextureField } from '../../components/common/TextureField'
 import { type ColumnDef, useColumnPreferences } from '../../components/common/useColumnPreferences'
 import { useDraggableColumns } from '../../components/common/useDraggableColumns'
@@ -123,13 +125,40 @@ function toTryAmount(
   return { value: amount, converted: false }
 }
 
-function SectionTitle({ children }: { children: React.ReactNode }) {
+const supplyTypeColor: Record<string, 'primary' | 'info' | 'success' | 'warning' | 'secondary'> = {
+  Ocak: 'primary',
+  Ithalat: 'info',
+  YerelTedarikci: 'success',
+  Konsinye: 'warning',
+  Diger: 'secondary',
+}
+
+function SectionTitle({ number, children }: { number: number; children: React.ReactNode }) {
   return (
     <Grid size={12}>
-      <Typography variant="overline" sx={{ fontWeight: 700, color: 'text.secondary', letterSpacing: 0.5 }}>
-        {children}
-      </Typography>
-      <Divider sx={{ mb: 1 }} />
+      <Stack direction="row" spacing={1.5} sx={{ alignItems: 'center', mb: 1.5 }}>
+        <Box
+          sx={{
+            width: 22,
+            height: 22,
+            borderRadius: '50%',
+            bgcolor: 'primary.main',
+            color: 'primary.contrastText',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            fontSize: 11,
+            fontWeight: 700,
+            flexShrink: 0,
+          }}
+        >
+          {number}
+        </Box>
+        <Typography variant="caption" sx={{ fontWeight: 600, color: 'primary.main', whiteSpace: 'nowrap' }}>
+          {children}
+        </Typography>
+        <Divider sx={{ flex: 1 }} />
+      </Stack>
     </Grid>
   )
 }
@@ -191,7 +220,14 @@ export function IncomingStockPage() {
       case 'arrivalDate':
         return r.arrivalDate
       case 'supplyType':
-        return SUPPLY_TYPE_LABELS[r.supplyType] ?? r.supplyType
+        return (
+          <Chip
+            label={SUPPLY_TYPE_LABELS[r.supplyType] ?? r.supplyType}
+            size="small"
+            color={supplyTypeColor[r.supplyType] ?? 'default'}
+            variant="outlined"
+          />
+        )
       case 'supplier':
         return r.supplier
       case 'plateCount':
@@ -285,6 +321,21 @@ export function IncomingStockPage() {
       return [r.batchCode, r.stoneName, r.supplier].some((field) => field.toLowerCase().includes(term))
     })
   }, [rowsQuery.data, search, supplyTypeFilter])
+
+  const incomingStats = useMemo(() => {
+    const all = rowsQuery.data ?? []
+    const now = new Date()
+    const thisMonth = all.filter((r) => {
+      const d = new Date(r.arrivalDate)
+      return d.getFullYear() === now.getFullYear() && d.getMonth() === now.getMonth()
+    })
+    return {
+      total: all.length,
+      thisMonthCount: thisMonth.length,
+      totalArea: all.reduce((sum, r) => sum + r.totalArea, 0),
+      thisMonthArea: thisMonth.reduce((sum, r) => sum + r.totalArea, 0),
+    }
+  }, [rowsQuery.data])
 
   const createMutation = useMutation({
     mutationFn: createIncomingStock,
@@ -469,6 +520,13 @@ export function IncomingStockPage() {
         )}
       </Stack>
 
+      <Stack direction="row" sx={{ flexWrap: 'wrap', gap: 1.75, mb: 3 }}>
+        <StatTile label="Toplam Parti/Lot" value={incomingStats.total} />
+        <StatTile label="Bu Ay Gelen" value={incomingStats.thisMonthCount} />
+        <StatTile label="Toplam Alan" value={`${incomingStats.totalArea.toLocaleString('tr-TR')} m²`} />
+        <StatTile label="Bu Ay Gelen Alan" value={`${incomingStats.thisMonthArea.toLocaleString('tr-TR')} m²`} />
+      </Stack>
+
       <Stack direction="row" spacing={2} sx={{ mb: 2, alignItems: 'center', flexWrap: 'wrap' }}>
         <TextField
           size="small"
@@ -568,7 +626,7 @@ export function IncomingStockPage() {
         <DialogTitle>Yeni Gelen Parti/Lot</DialogTitle>
         <DialogContent>
           <Grid container spacing={2} sx={{ mt: 0.5 }}>
-            <SectionTitle>1. Parti/Lot Bilgileri</SectionTitle>
+            <SectionTitle number={1}>Parti/Lot Bilgileri</SectionTitle>
             <Grid size={12}>
               <Alert severity="info" variant="outlined">
                 Parti/Lot Kodu, sıradaki numaraya göre otomatik atanacak (örn. PB-{new Date().getFullYear()}-001).
@@ -617,7 +675,7 @@ export function IncomingStockPage() {
               <TextField label="Tedarikçi" value={form.supplier} onChange={handleChange('supplier')} fullWidth />
             </Grid>
 
-            <SectionTitle>2. Ürün/Stok Bilgileri</SectionTitle>
+            <SectionTitle number={2}>Ürün/Stok Bilgileri</SectionTitle>
             <Grid size={{ xs: 12, sm: 6 }}>
               <TextField
                 label="Gelen Bundle Sayısı"
@@ -673,7 +731,7 @@ export function IncomingStockPage() {
 
             {canSeeCost && (
               <>
-                <SectionTitle>3. Maliyet Bilgileri</SectionTitle>
+                <SectionTitle number={3}>Maliyet Bilgileri</SectionTitle>
                 <Grid size={{ xs: 12, sm: 6 }}>
                   <TextField
                     label="Birim Maliyet (m²)"
@@ -751,7 +809,7 @@ export function IncomingStockPage() {
 
                 {form.costCurrency !== 'TRY' && (
                   <>
-                    <SectionTitle>4. Kur Bilgileri</SectionTitle>
+                    <SectionTitle number={4}>Kur Bilgileri</SectionTitle>
                     <Grid size={{ xs: 12, sm: 6 }}>
                       <TextField
                         label="Geliş Tarihi Kur Bilgisi"
@@ -818,7 +876,7 @@ export function IncomingStockPage() {
                   </>
                 )}
 
-                <SectionTitle>5. Satış Fiyatlandırması</SectionTitle>
+                <SectionTitle number={5}>Satış Fiyatlandırması</SectionTitle>
                 <Grid size={{ xs: 12, sm: 6 }}>
                   <TextField
                     label="Satış Maliyeti"
@@ -901,7 +959,7 @@ export function IncomingStockPage() {
         <DialogContent>
           {editForm && (
             <Grid container spacing={2} sx={{ mt: 0.5 }}>
-              <SectionTitle>1. Parti/Lot Bilgileri</SectionTitle>
+              <SectionTitle number={1}>Parti/Lot Bilgileri</SectionTitle>
               <Grid size={{ xs: 12, sm: 6 }}>
                 <TextField label="Parti/Lot Kodu" value={editingRow?.batchCode ?? ''} fullWidth disabled />
               </Grid>
@@ -936,7 +994,7 @@ export function IncomingStockPage() {
                 <TextField label="Tedarikçi" value={editForm.supplier} onChange={handleEditChange('supplier')} fullWidth />
               </Grid>
 
-              <SectionTitle>2. Ürün/Stok Bilgileri</SectionTitle>
+              <SectionTitle number={2}>Ürün/Stok Bilgileri</SectionTitle>
               <Grid size={{ xs: 12, sm: 6 }}>
                 <TextField
                   label="Gelen Bundle Sayısı"
@@ -1005,7 +1063,7 @@ export function IncomingStockPage() {
               </Grid>
               {canSeeCost && (
                 <>
-                  <SectionTitle>3. Maliyet Bilgileri</SectionTitle>
+                  <SectionTitle number={3}>Maliyet Bilgileri</SectionTitle>
                   <Grid size={{ xs: 12, sm: 6 }}>
                     <TextField
                       label="Birim Maliyet (m²)"
@@ -1086,7 +1144,7 @@ export function IncomingStockPage() {
                   </Grid>
                   {editForm.costCurrency !== 'TRY' && (
                     <>
-                      <SectionTitle>4. Kur Bilgileri</SectionTitle>
+                      <SectionTitle number={4}>Kur Bilgileri</SectionTitle>
                       <Grid size={{ xs: 12, sm: 6 }}>
                         <TextField
                           label="Geliş Tarihi Kur Bilgisi"
@@ -1153,7 +1211,7 @@ export function IncomingStockPage() {
                     </>
                   )}
 
-                  <SectionTitle>5. Satış Fiyatlandırması</SectionTitle>
+                  <SectionTitle number={5}>Satış Fiyatlandırması</SectionTitle>
                   <Grid size={{ xs: 12, sm: 6 }}>
                     <TextField
                       label="Satış Maliyeti"

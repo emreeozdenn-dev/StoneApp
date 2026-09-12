@@ -114,6 +114,7 @@ public sealed class OffersController : ControllerBase
             ShippingIncluded = request.ShippingIncluded,
             UsdRate = request.UsdRate,
             TotalAmount = items.Sum(i => i.LineTotal),
+            Status = Enum.TryParse<OfferStatus>(request.Status, out var status) ? status : OfferStatus.Taslak,
             CreatedByUserId = userId,
             Items = items,
         };
@@ -307,6 +308,7 @@ public sealed class OffersController : ControllerBase
         o.CreatedAt,
         o.IsSold,
         o.SoldAt,
+        o.Status.ToString(),
         o.Items.Select(i => new OfferItemDto(
             i.Id, i.PlateId, i.PlateNo, i.StoneName, i.WidthCm, i.HeightCm, i.ThicknessCm, i.Texture,
             i.AreaM2, i.UnitPrice, i.LineTotal, i.Quantity, ParsePlateIds(i.PlateIds))).ToList());

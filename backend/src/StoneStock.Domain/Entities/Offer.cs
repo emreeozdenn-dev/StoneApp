@@ -16,6 +16,7 @@ public sealed class Offer
     public bool ShippingIncluded { get; set; }
     public decimal? UsdRate { get; set; }
     public decimal TotalAmount { get; set; }
+    public OfferStatus Status { get; set; } = OfferStatus.Taslak;
 
     public int CreatedByUserId { get; set; }
     public User CreatedByUser { get; set; } = null!;

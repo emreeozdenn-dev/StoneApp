@@ -13,6 +13,27 @@ const theme = createTheme({
   palette: {
     primary: { main: '#2F615C' },
   },
+  components: {
+    MuiTableCell: {
+      styleOverrides: {
+        root: {
+          textAlign: 'left !important' as 'left',
+        },
+      },
+    },
+    MuiTextField: {
+      defaultProps: {
+        size: 'small',
+      },
+    },
+    MuiOutlinedInput: {
+      styleOverrides: {
+        root: {
+          borderRadius: 8,
+        },
+      },
+    },
+  },
 })
 
 const queryClient = new QueryClient({

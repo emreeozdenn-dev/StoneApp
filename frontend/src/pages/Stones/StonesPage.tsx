@@ -10,6 +10,7 @@ import {
   DialogContent,
   DialogTitle,
   FormControlLabel,
+  Grid,
   InputAdornment,
   MenuItem,
   Stack,
@@ -38,15 +39,16 @@ import {
 import { hasPermission, useCurrentUser } from '../../auth/useCurrentUser'
 import { ColorField } from '../../components/common/ColorField'
 import { ColumnSettingsButton } from '../../components/common/ColumnSettingsButton'
+import { GroupLabel } from '../../components/common/GroupLabel'
+import { ImageDropzone } from '../../components/common/ImageDropzone'
 import { ImageThumbnail } from '../../components/common/ImageThumbnail'
 import { OriginField } from '../../components/common/OriginField'
+import { StatTile } from '../../components/common/StatTile'
 import { type ColumnDef, useColumnPreferences } from '../../components/common/useColumnPreferences'
 import { useDraggableColumns } from '../../components/common/useDraggableColumns'
 
 type StoneColumnKey =
-  | 'image'
   | 'name'
-  | 'code'
   | 'type'
   | 'origin'
   | 'color'
@@ -55,9 +57,7 @@ type StoneColumnKey =
   | 'status'
 
 const STONE_COLUMNS: ColumnDef<StoneColumnKey>[] = [
-  { key: 'image', label: 'Görsel' },
-  { key: 'name', label: 'Taş Adı' },
-  { key: 'code', label: 'Kod' },
+  { key: 'name', label: 'Taş' },
   { key: 'type', label: 'Tip' },
   { key: 'origin', label: 'Menşei' },
   { key: 'color', label: 'Renk' },
@@ -103,7 +103,6 @@ export function StonesPage() {
   const [createImage, setCreateImage] = useState<File | null>(null)
   const [createError, setCreateError] = useState<string | null>(null)
   const [createSubmitting, setCreateSubmitting] = useState(false)
-  const createFileInputRef = useRef<HTMLInputElement>(null)
 
   const [importOpen, setImportOpen] = useState(false)
   const [importFile, setImportFile] = useState<File | null>(null)
@@ -118,7 +117,6 @@ export function StonesPage() {
   const [editImage, setEditImage] = useState<File | null>(null)
   const [editError, setEditError] = useState<string | null>(null)
   const [editSubmitting, setEditSubmitting] = useState(false)
-  const editFileInputRef = useRef<HTMLInputElement>(null)
 
   const canCreate = hasPermission(user?.permissions, 'stones.create')
   const canEdit = hasPermission(user?.permissions, 'stones.edit')
@@ -129,18 +127,32 @@ export function StonesPage() {
 
   function renderStoneCell(key: StoneColumnKey, s: Stone) {
     switch (key) {
-      case 'image':
-        return <ImageThumbnail src={s.imageUrl} alt={s.name} />
       case 'name':
-        return s.name
-      case 'code':
-        return s.code
+        return (
+          <Stack direction="row" spacing={1.25} sx={{ alignItems: 'center' }}>
+            <ImageThumbnail src={s.imageUrl} alt={s.name} size={38} />
+            <Box>
+              <Typography variant="body2" sx={{ fontWeight: 500, lineHeight: 1.3 }}>
+                {s.name}
+              </Typography>
+              <Typography variant="caption" color="text.secondary">
+                {s.code}
+              </Typography>
+            </Box>
+          </Stack>
+        )
       case 'type':
         return s.type
       case 'origin':
         return s.origin
       case 'color':
-        return s.color
+        return (
+          <Stack direction="row" spacing={0.5} sx={{ flexWrap: 'wrap', gap: 0.5 }}>
+            {parseColors(s.color).map((c) => (
+              <Chip key={c} label={c} size="small" variant="outlined" />
+            ))}
+          </Stack>
+        )
       case 'currentStock':
         return s.currentStock.toLocaleString('tr-TR')
       case 'minimumStock':
@@ -167,6 +179,16 @@ export function StonesPage() {
       return [s.name, s.code, s.type, s.origin, s.color].some((field) => field.toLowerCase().includes(term))
     })
   }, [stonesQuery.data, search, onlyLowStock])
+
+  const stoneStats = useMemo(() => {
+    const all = stonesQuery.data ?? []
+    return {
+      total: all.length,
+      active: all.filter((s) => s.status === 'Aktif').length,
+      lowStock: all.filter((s) => s.isBelowMinimumStock).length,
+      totalCurrentStock: all.reduce((sum, s) => sum + s.currentStock, 0),
+    }
+  }, [stonesQuery.data])
 
   const createMutation = useMutation({ mutationFn: createStone })
   const updateMutation = useMutation({
@@ -337,6 +359,13 @@ export function StonesPage() {
         )}
       </Stack>
 
+      <Stack direction="row" sx={{ flexWrap: 'wrap', gap: 1.75, mb: 3 }}>
+        <StatTile label="Toplam Taş Çeşidi" value={stoneStats.total} />
+        <StatTile label="Aktif" value={stoneStats.active} />
+        <StatTile label="Düşük Stok" value={stoneStats.lowStock} status={stoneStats.lowStock > 0 ? 'warning' : undefined} />
+        <StatTile label="Toplam Mevcut Stok" value={`${stoneStats.totalCurrentStock.toLocaleString('tr-TR')} m²`} />
+      </Stack>
+
       <Stack direction="row" spacing={2} sx={{ mb: 2, alignItems: 'center', flexWrap: 'wrap' }}>
         <TextField
           size="small"
@@ -363,7 +392,7 @@ export function StonesPage() {
 
       <Box sx={{ overflowX: 'auto' }}>
         <Table sx={{ minWidth: 920 }}>
-          <TableHead>
+          <TableHead sx={{ bgcolor: 'grey.50' }}>
             <TableRow>
               {columnPrefs.visibleOrderedKeys.map((key) => {
                 const col = STONE_COLUMNS.find((c) => c.key === key)
@@ -500,46 +529,58 @@ export function StonesPage() {
         </DialogActions>
       </Dialog>
 
-      <Dialog open={createOpen} onClose={() => setCreateOpen(false)} maxWidth="sm" fullWidth>
+      <Dialog open={createOpen} onClose={() => setCreateOpen(false)} maxWidth="md" fullWidth>
         <DialogTitle>Yeni Taş</DialogTitle>
         <DialogContent>
-          <Stack spacing={2} sx={{ mt: 1 }}>
-            <TextField label="Taş Adı" value={createForm.name} onChange={handleCreateChange('name')} fullWidth />
-            <TextField label="Taş Kodu" value={createForm.code} onChange={handleCreateChange('code')} fullWidth />
-            <TextField label="Tip" value={createForm.type} onChange={handleCreateChange('type')} fullWidth />
-            <OriginField
-              value={createForm.origin}
-              onChange={(origin) => setCreateForm((prev) => ({ ...prev, origin }))}
-            />
-            <ColorField
-              value={createForm.color}
-              onChange={(color) => setCreateForm((prev) => ({ ...prev, color }))}
-            />
-            <TextField
-              label="Minimum Stok (m²)"
-              value={createForm.minimumStock}
-              onChange={handleCreateChange('minimumStock')}
-              fullWidth
-            />
-            <Stack direction="row" spacing={1.5} sx={{ alignItems: 'center' }}>
-              <ImageThumbnail
-                src={createImage ? URL.createObjectURL(createImage) : null}
-                alt="Önizleme"
-                size={56}
+          <Grid container spacing={3} sx={{ mt: 0.5 }}>
+            <Grid size={{ xs: 12, sm: 'auto' }} sx={{ display: 'flex', justifyContent: { xs: 'center', sm: 'flex-start' } }}>
+              <ImageDropzone file={createImage} onChange={setCreateImage} />
+            </Grid>
+            <Grid size={{ xs: 12, sm: 'grow' }}>
+              <GroupLabel>Temel Bilgiler</GroupLabel>
+              <Stack spacing={2} sx={{ mb: 2.5 }}>
+                <TextField label="Taş Adı" value={createForm.name} onChange={handleCreateChange('name')} fullWidth />
+                <Grid container spacing={2}>
+                  <Grid size={{ xs: 12, sm: 6 }}>
+                    <TextField label="Taş Kodu" value={createForm.code} onChange={handleCreateChange('code')} fullWidth />
+                  </Grid>
+                  <Grid size={{ xs: 12, sm: 6 }}>
+                    <TextField label="Tip" value={createForm.type} onChange={handleCreateChange('type')} fullWidth />
+                  </Grid>
+                </Grid>
+              </Stack>
+
+              <GroupLabel>Menşei &amp; Stok</GroupLabel>
+              <Grid container spacing={2} sx={{ mb: 2.5 }}>
+                <Grid size={{ xs: 12, sm: 6 }}>
+                  <OriginField
+                    value={createForm.origin}
+                    onChange={(origin) => setCreateForm((prev) => ({ ...prev, origin }))}
+                  />
+                </Grid>
+                <Grid size={{ xs: 12, sm: 6 }}>
+                  <TextField
+                    label="Minimum Stok (m²)"
+                    value={createForm.minimumStock}
+                    onChange={handleCreateChange('minimumStock')}
+                    fullWidth
+                  />
+                </Grid>
+              </Grid>
+
+              <GroupLabel>Renk</GroupLabel>
+              <ColorField
+                value={createForm.color}
+                onChange={(color) => setCreateForm((prev) => ({ ...prev, color }))}
               />
-              <Button variant="outlined" size="small" onClick={() => createFileInputRef.current?.click()}>
-                Görsel Seç
-              </Button>
-              <input
-                ref={createFileInputRef}
-                type="file"
-                accept="image/jpeg,image/png,image/webp"
-                hidden
-                onChange={(e) => setCreateImage(e.target.files?.[0] ?? null)}
-              />
-            </Stack>
-            {createError && <Alert severity="error">{createError}</Alert>}
-          </Stack>
+
+              {createError && (
+                <Alert severity="error" sx={{ mt: 2.5 }}>
+                  {createError}
+                </Alert>
+              )}
+            </Grid>
+          </Grid>
         </DialogContent>
         <DialogActions>
           <Button onClick={() => setCreateOpen(false)}>Vazgeç</Button>
@@ -549,59 +590,71 @@ export function StonesPage() {
         </DialogActions>
       </Dialog>
 
-      <Dialog open={!!editingStone} onClose={() => setEditingStone(null)} maxWidth="sm" fullWidth>
+      <Dialog open={!!editingStone} onClose={() => setEditingStone(null)} maxWidth="md" fullWidth>
         <DialogTitle>Taşı Düzenle</DialogTitle>
         <DialogContent>
           {editForm && (
-            <Stack spacing={2} sx={{ mt: 1 }}>
-              <TextField label="Taş Kodu" value={editingStone?.code ?? ''} fullWidth disabled />
-              <TextField label="Taş Adı" value={editForm.name} onChange={handleEditChange('name')} fullWidth />
-              <TextField label="Tip" value={editForm.type} onChange={handleEditChange('type')} fullWidth />
-              <OriginField
-                value={editForm.origin}
-                onChange={(origin) => setEditForm((prev) => (prev ? { ...prev, origin } : prev))}
-              />
-              <ColorField
-                value={editForm.color}
-                onChange={(color) => setEditForm((prev) => (prev ? { ...prev, color } : prev))}
-              />
-              <TextField
-                label="Minimum Stok (m²)"
-                value={editForm.minimumStock}
-                onChange={handleEditChange('minimumStock')}
-                fullWidth
-              />
-              <TextField
-                select
-                label="Durum"
-                value={editForm.status}
-                onChange={(e) =>
-                  setEditForm((prev) => (prev ? { ...prev, status: e.target.value as 'Aktif' | 'Pasif' } : prev))
-                }
-                fullWidth
-              >
-                <MenuItem value="Aktif">Aktif</MenuItem>
-                <MenuItem value="Pasif">Pasif</MenuItem>
-              </TextField>
-              <Stack direction="row" spacing={1.5} sx={{ alignItems: 'center' }}>
-                <ImageThumbnail
-                  src={editImage ? URL.createObjectURL(editImage) : editingStone?.imageUrl}
-                  alt="Önizleme"
-                  size={56}
+            <Grid container spacing={3} sx={{ mt: 0.5 }}>
+              <Grid size={{ xs: 12, sm: 'auto' }} sx={{ display: 'flex', justifyContent: { xs: 'center', sm: 'flex-start' } }}>
+                <ImageDropzone file={editImage} existingUrl={editingStone?.imageUrl} onChange={setEditImage} />
+              </Grid>
+              <Grid size={{ xs: 12, sm: 'grow' }}>
+                <GroupLabel>Temel Bilgiler</GroupLabel>
+                <Stack spacing={2} sx={{ mb: 2.5 }}>
+                  <Grid container spacing={2}>
+                    <Grid size={{ xs: 12, sm: 6 }}>
+                      <TextField label="Taş Kodu" value={editingStone?.code ?? ''} fullWidth disabled />
+                    </Grid>
+                    <Grid size={{ xs: 12, sm: 6 }}>
+                      <TextField
+                        select
+                        label="Durum"
+                        value={editForm.status}
+                        onChange={(e) =>
+                          setEditForm((prev) => (prev ? { ...prev, status: e.target.value as 'Aktif' | 'Pasif' } : prev))
+                        }
+                        fullWidth
+                      >
+                        <MenuItem value="Aktif">Aktif</MenuItem>
+                        <MenuItem value="Pasif">Pasif</MenuItem>
+                      </TextField>
+                    </Grid>
+                  </Grid>
+                  <TextField label="Taş Adı" value={editForm.name} onChange={handleEditChange('name')} fullWidth />
+                  <TextField label="Tip" value={editForm.type} onChange={handleEditChange('type')} fullWidth />
+                </Stack>
+
+                <GroupLabel>Menşei &amp; Stok</GroupLabel>
+                <Grid container spacing={2} sx={{ mb: 2.5 }}>
+                  <Grid size={{ xs: 12, sm: 6 }}>
+                    <OriginField
+                      value={editForm.origin}
+                      onChange={(origin) => setEditForm((prev) => (prev ? { ...prev, origin } : prev))}
+                    />
+                  </Grid>
+                  <Grid size={{ xs: 12, sm: 6 }}>
+                    <TextField
+                      label="Minimum Stok (m²)"
+                      value={editForm.minimumStock}
+                      onChange={handleEditChange('minimumStock')}
+                      fullWidth
+                    />
+                  </Grid>
+                </Grid>
+
+                <GroupLabel>Renk</GroupLabel>
+                <ColorField
+                  value={editForm.color}
+                  onChange={(color) => setEditForm((prev) => (prev ? { ...prev, color } : prev))}
                 />
-                <Button variant="outlined" size="small" onClick={() => editFileInputRef.current?.click()}>
-                  Görseli Değiştir
-                </Button>
-                <input
-                  ref={editFileInputRef}
-                  type="file"
-                  accept="image/jpeg,image/png,image/webp"
-                  hidden
-                  onChange={(e) => setEditImage(e.target.files?.[0] ?? null)}
-                />
-              </Stack>
-              {editError && <Alert severity="error">{editError}</Alert>}
-            </Stack>
+
+                {editError && (
+                  <Alert severity="error" sx={{ mt: 2.5 }}>
+                    {editError}
+                  </Alert>
+                )}
+              </Grid>
+            </Grid>
           )}
         </DialogContent>
         <DialogActions>

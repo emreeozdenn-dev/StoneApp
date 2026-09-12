@@ -1,0 +1,29 @@
+﻿using Microsoft.EntityFrameworkCore.Migrations;
+
+#nullable disable
+
+namespace StoneStock.Infrastructure.Persistence.Migrations
+{
+    /// <inheritdoc />
+    public partial class AddOfferStatus : Migration
+    {
+        /// <inheritdoc />
+        protected override void Up(MigrationBuilder migrationBuilder)
+        {
+            migrationBuilder.AddColumn<string>(
+                name: "Status",
+                table: "Offers",
+                type: "text",
+                nullable: false,
+                defaultValue: "Taslak");
+        }
+
+        /// <inheritdoc />
+        protected override void Down(MigrationBuilder migrationBuilder)
+        {
+            migrationBuilder.DropColumn(
+                name: "Status",
+                table: "Offers");
+        }
+    }
+}

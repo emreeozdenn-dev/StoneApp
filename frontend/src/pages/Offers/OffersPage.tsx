@@ -17,7 +17,7 @@ import {
   TableRow,
   Typography,
 } from '@mui/material'
-import { deleteOffer, fetchOffers, markOfferSold, type Offer } from '../../api/offers'
+import { deleteOffer, fetchOffers, markOfferSold, OFFER_STATUS_LABELS, type Offer } from '../../api/offers'
 import { fetchCompanyBranding } from '../../api/systemSettings'
 import { hasPermission, useCurrentUser } from '../../auth/useCurrentUser'
 import { ColumnSettingsButton } from '../../components/common/ColumnSettingsButton'
@@ -26,13 +26,21 @@ import { type ColumnDef, useColumnPreferences } from '../../components/common/us
 import { useDraggableColumns } from '../../components/common/useDraggableColumns'
 import { exportOfferPdf } from '../../utils/plateExport'
 
-type OfferColumnKey = 'offerDate' | 'companyName' | 'currency' | 'totalAmount' | 'createdByUserName' | 'createdAt'
+type OfferColumnKey =
+  | 'offerDate'
+  | 'companyName'
+  | 'currency'
+  | 'totalAmount'
+  | 'status'
+  | 'createdByUserName'
+  | 'createdAt'
 
 const OFFER_COLUMNS: ColumnDef<OfferColumnKey>[] = [
   { key: 'offerDate', label: 'Teklif Tarihi' },
   { key: 'companyName', label: 'Firma' },
   { key: 'currency', label: 'Para Birimi' },
   { key: 'totalAmount', label: 'Genel Toplam', align: 'right' },
+  { key: 'status', label: 'Durum' },
   { key: 'createdByUserName', label: 'Oluşturan' },
   { key: 'createdAt', label: 'Oluşturma Tarihi' },
 ]
@@ -107,6 +115,14 @@ export function OffersPage() {
         return o.currency
       case 'totalAmount':
         return `${o.totalAmount.toLocaleString('tr-TR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} ${o.currency}`
+      case 'status':
+        return (
+          <Chip
+            size="small"
+            color={o.status === 'Gonderildi' ? 'info' : 'default'}
+            label={OFFER_STATUS_LABELS[o.status]}
+          />
+        )
       case 'createdByUserName':
         return o.createdByUserName
       case 'createdAt':

@@ -43,16 +43,19 @@ import {
   type Plate,
 } from '../../api/catalog'
 import { fetchExchangeRates } from '../../api/exchangeRates'
-import { createOffer, sendOfferEmail } from '../../api/offers'
+import { createOffer, sendOfferEmail, type OfferStatus } from '../../api/offers'
 import { fetchCompanyBranding } from '../../api/systemSettings'
 import { hasPermission, useCurrentUser } from '../../auth/useCurrentUser'
 import { ColumnSettingsButton } from '../../components/common/ColumnSettingsButton'
 import { OfferPreviewDocument } from '../../components/common/OfferPreviewDocument'
 import { BarcodeThumbnail } from '../../components/common/BarcodeThumbnail'
+import { GroupLabel } from '../../components/common/GroupLabel'
+import { ImageDropzone } from '../../components/common/ImageDropzone'
 import { ImageThumbnail } from '../../components/common/ImageThumbnail'
 import { PlateInfoCard } from '../../components/common/PlateInfoCard'
 import { QrCodeThumbnail } from '../../components/common/QrCodeThumbnail'
 import { RichTextEditor } from '../../components/common/RichTextEditor'
+import { StatTile } from '../../components/common/StatTile'
 import { type ColumnDef, useColumnPreferences } from '../../components/common/useColumnPreferences'
 import { useDraggableColumns } from '../../components/common/useDraggableColumns'
 import { WarehouseField } from '../../components/common/WarehouseField'
@@ -147,7 +150,6 @@ export function PlatesPage() {
   const [createImage, setCreateImage] = useState<File | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [createSubmitting, setCreateSubmitting] = useState(false)
-  const createFileInputRef = useRef<HTMLInputElement>(null)
 
   const [bulkDialogOpen, setBulkDialogOpen] = useState(false)
   const [bulkForm, setBulkForm] = useState(initialBulkForm)
@@ -155,7 +157,6 @@ export function PlatesPage() {
   const [bulkError, setBulkError] = useState<string | null>(null)
   const [bulkSubmitting, setBulkSubmitting] = useState(false)
   const [bulkProgress, setBulkProgress] = useState<{ done: number; total: number } | null>(null)
-  const bulkFileInputRef = useRef<HTMLInputElement>(null)
 
   const [saleDialogPlate, setSaleDialogPlate] = useState<Plate | null>(null)
   const [saleAmount, setSaleAmount] = useState('')
@@ -195,10 +196,6 @@ export function PlatesPage() {
       { key: 'dimensions', label: 'En x Boy (cm)', align: 'right' },
       { key: 'area', label: 'Alan (m²)', align: 'right' },
       { key: 'warehouse', label: 'Depo' },
-      { key: 'status', label: 'Durum' },
-      { key: 'supplyType', label: 'Tedarik Türü' },
-      { key: 'qr', label: 'QR' },
-      { key: 'barcode', label: 'Barkod' },
     ]
     if (canSeeCost) cols.push({ key: 'unitCost', label: 'Birim Maliyet', align: 'right' })
     cols.push({ key: 'saleCost', label: 'Satış Maliyeti', align: 'right' })
@@ -206,6 +203,10 @@ export function PlatesPage() {
       cols.push({ key: 'saleCostLive', label: 'Satış Maliyeti (Güncel Kura Göre)', align: 'right' })
       cols.push({ key: 'saleCostArrival', label: 'Satış Maliyeti (Geliş Kuruna Göre)', align: 'right' })
     }
+    cols.push({ key: 'status', label: 'Durum' })
+    cols.push({ key: 'supplyType', label: 'Tedarik Türü' })
+    cols.push({ key: 'barcode', label: 'Barkod' })
+    cols.push({ key: 'qr', label: 'QR' })
     cols.push({ key: 'saleAmount', label: 'Satış Tutarı', align: 'right' })
     return cols
   }, [canSeeCost])
@@ -295,6 +296,21 @@ export function PlatesPage() {
       )
     })
   }, [platesQuery.data, search, statusFilter])
+
+  const plateStats = useMemo(() => {
+    const all = platesQuery.data ?? []
+    const now = new Date()
+    return {
+      total: all.length,
+      activeArea: all.filter((p) => p.status === 'Aktif').reduce((sum, p) => sum + p.area, 0),
+      reserved: all.filter((p) => p.status === 'Rezerve').length,
+      soldThisMonth: all.filter((p) => {
+        if (p.status !== 'Satildi' || !p.soldAt) return false
+        const d = new Date(p.soldAt)
+        return d.getFullYear() === now.getFullYear() && d.getMonth() === now.getMonth()
+      }).length,
+    }
+  }, [platesQuery.data])
 
   const [selectedIds, setSelectedIds] = useState<Set<number>>(new Set())
   const allVisibleSelected = filteredPlates.length > 0 && filteredPlates.every((p) => selectedIds.has(p.id))
@@ -469,37 +485,40 @@ export function PlatesPage() {
     },
   })
 
+  const buildOfferPayload = (status: OfferStatus) => ({
+    companyName: offerCompany,
+    companyAddress: offerCompanyAddress || null,
+    offerDate,
+    currency: offerCurrency,
+    vatIncluded: offerVatIncluded === 'Dahil',
+    validityDays: Number(offerValidityDays) || 0,
+    deliveryMethod: offerDeliveryMethod || null,
+    deliveryAddress: offerDeliveryAddress || null,
+    shippingIncluded: offerShippingIncluded === 'Dahil',
+    usdRate: offerEffectiveUsdRate,
+    status,
+    items: offerLines.map((line) => {
+      const rep = line.plates[0]
+      return {
+        plateId: line.quantity === 1 ? rep.id : null,
+        plateNo: line.plates.map((p) => p.plateNo).join(', '),
+        stoneName: rep.stoneName,
+        widthCm: metersToCm(rep.width),
+        heightCm: metersToCm(rep.height),
+        thicknessCm: rep.thickness,
+        texture: rep.texture,
+        areaM2: rep.area,
+        unitPrice: Number(getLineUnitPrice(line)) || 0,
+        quantity: line.quantity,
+        plateIds: line.plates.map((p) => p.id),
+      }
+    }),
+  })
+
   const handleSaveOffer = () => {
     setOfferExportError(null)
     setOfferSaveSuccess(false)
-    saveOfferMutation.mutate({
-      companyName: offerCompany,
-      companyAddress: offerCompanyAddress || null,
-      offerDate,
-      currency: offerCurrency,
-      vatIncluded: offerVatIncluded === 'Dahil',
-      validityDays: Number(offerValidityDays) || 0,
-      deliveryMethod: offerDeliveryMethod || null,
-      deliveryAddress: offerDeliveryAddress || null,
-      shippingIncluded: offerShippingIncluded === 'Dahil',
-      usdRate: offerEffectiveUsdRate,
-      items: offerLines.map((line) => {
-        const rep = line.plates[0]
-        return {
-          plateId: line.quantity === 1 ? rep.id : null,
-          plateNo: line.plates.map((p) => p.plateNo).join(', '),
-          stoneName: rep.stoneName,
-          widthCm: metersToCm(rep.width),
-          heightCm: metersToCm(rep.height),
-          thicknessCm: rep.thickness,
-          texture: rep.texture,
-          areaM2: rep.area,
-          unitPrice: Number(getLineUnitPrice(line)) || 0,
-          quantity: line.quantity,
-          plateIds: line.plates.map((p) => p.id),
-        }
-      }),
-    })
+    saveOfferMutation.mutate(buildOfferPayload('Taslak'))
   }
 
   const [offerEmailSuccess, setOfferEmailSuccess] = useState(false)
@@ -527,13 +546,25 @@ export function PlatesPage() {
     if (!offerContainerRef.current) return
     try {
       const pdfBlob = await generateOfferPdfBlob(offerContainerRef.current)
-      sendOfferEmailMutation.mutate({
-        to: offerRecipientEmail.trim(),
-        cc: offerCcEmail.trim(),
-        subject: offerEmailSubject.trim() || 'Fiyat Teklifi',
-        htmlBody: offerEmailMessage,
-        pdf: pdfBlob,
-      })
+      sendOfferEmailMutation.mutate(
+        {
+          to: offerRecipientEmail.trim(),
+          cc: offerCcEmail.trim(),
+          subject: offerEmailSubject.trim() || 'Fiyat Teklifi',
+          htmlBody: offerEmailMessage,
+          pdf: pdfBlob,
+        },
+        {
+          onSuccess: async () => {
+            try {
+              await createOffer(buildOfferPayload('Gonderildi'))
+              queryClient.invalidateQueries({ queryKey: ['offers'] })
+            } catch {
+              setOfferExportError('Teklif e-postası gönderildi ancak teklif listeye kaydedilemedi.')
+            }
+          },
+        },
+      )
     } catch {
       setOfferExportError('Teklif PDF olarak hazırlanamadı.')
     }
@@ -827,6 +858,13 @@ export function PlatesPage() {
         )}
       </Stack>
 
+      <Stack direction="row" sx={{ flexWrap: 'wrap', gap: 1.75, mb: 3 }}>
+        <StatTile label="Toplam Plaka" value={plateStats.total} />
+        <StatTile label="Aktif Alan" value={`${plateStats.activeArea.toLocaleString('tr-TR')} m²`} />
+        <StatTile label="Rezerve" value={plateStats.reserved} />
+        <StatTile label="Bu Ay Satılan" value={plateStats.soldThisMonth} />
+      </Stack>
+
       <Stack direction="row" spacing={2} sx={{ mb: 2, alignItems: 'center', flexWrap: 'wrap' }}>
         <TextField
           size="small"
@@ -993,103 +1031,119 @@ export function PlatesPage() {
         )}
       </Box>
 
-      <Dialog open={dialogOpen} onClose={() => setDialogOpen(false)} maxWidth="sm" fullWidth>
+      <Dialog open={dialogOpen} onClose={() => setDialogOpen(false)} maxWidth="md" fullWidth>
         <DialogTitle>Yeni Plaka</DialogTitle>
         <DialogContent>
-          <Stack spacing={2} sx={{ mt: 1 }}>
-            <Alert severity="info" variant="outlined">
-              Plaka No, taş seçildikten sonra sıradaki numaraya göre otomatik atanacak.
-            </Alert>
-            <TextField
-              select
-              label="Taş"
-              value={form.stoneId}
-              onChange={(e) =>
-                setForm((prev) => ({ ...prev, stoneId: String(e.target.value), incomingStockId: '' }))
-              }
-              fullWidth
-            >
-              {stonesQuery.data?.map((s) => (
-                <MenuItem key={s.id} value={s.id}>
-                  {s.name} ({s.code})
-                </MenuItem>
-              ))}
-            </TextField>
-            <TextField
-              select
-              label="Gelen Parti/Lot"
-              value={form.incomingStockId}
-              onChange={(e) =>
-                setForm((prev) => ({ ...prev, incomingStockId: String(e.target.value), bundleNumber: '' }))
-              }
-              fullWidth
-              disabled={!form.stoneId}
-            >
-              {batchesForStone.map((b) => (
-                <MenuItem key={b.id} value={b.id}>
-                  {b.batchCode} — {b.arrivalDate}
-                </MenuItem>
-              ))}
-            </TextField>
-            {selectedBatch && selectedBatch.bundleCount > 0 && (
-              <TextField
-                select
-                label="Bundle Seçimi"
-                value={form.bundleNumber}
-                onChange={(e) => setForm((prev) => ({ ...prev, bundleNumber: e.target.value }))}
-                fullWidth
-                required
-              >
-                {createBundleLabels.map((label, index) => (
-                  <MenuItem key={index + 1} value={index + 1}>
-                    {label}
-                  </MenuItem>
-                ))}
-              </TextField>
-            )}
-            <Stack direction="row" spacing={2}>
-              <TextField
-                label="Doku"
-                value={selectedBatch?.texture ?? ''}
-                helperText="Partiden otomatik gelir."
-                fullWidth
-                disabled
-              />
-              <TextField
-                label="Kalınlık (cm)"
-                value={selectedBatch?.thickness ?? ''}
-                helperText="Partiden otomatik gelir."
-                fullWidth
-                disabled
-              />
-            </Stack>
-            <Stack direction="row" spacing={2}>
-              <TextField label="En (cm)" value={form.width} onChange={handleChange('width')} fullWidth />
-              <TextField label="Boy (cm)" value={form.height} onChange={handleChange('height')} fullWidth />
-            </Stack>
-            <WarehouseField
-              value={form.warehouse}
-              onChange={(value) => setForm((prev) => ({ ...prev, warehouse: value }))}
-            />
-            <Stack direction="row" spacing={1.5} sx={{ alignItems: 'center' }}>
-              <ImageThumbnail
-                src={createImage ? URL.createObjectURL(createImage) : null}
-                alt="Önizleme"
-                size={56}
-              />
-              <Button variant="outlined" size="small" onClick={() => createFileInputRef.current?.click()}>
-                Görsel Seç
-              </Button>
-              <input
-                ref={createFileInputRef}
-                type="file"
-                accept="image/jpeg,image/png,image/webp"
-                hidden
-                onChange={(e) => setCreateImage(e.target.files?.[0] ?? null)}
-              />
-            </Stack>
-            {error && <Alert severity="error">{error}</Alert>}
-          </Stack>
+          <Alert severity="info" variant="outlined" sx={{ mt: 0.5, mb: 2.5 }}>
+            Plaka No, taş seçildikten sonra sıradaki numaraya göre otomatik atanacak.
+          </Alert>
+          <Grid container spacing={3}>
+            <Grid size={{ xs: 12, sm: 'auto' }} sx={{ display: 'flex', justifyContent: { xs: 'center', sm: 'flex-start' } }}>
+              <ImageDropzone file={createImage} onChange={setCreateImage} />
+            </Grid>
+            <Grid size={{ xs: 12, sm: 'grow' }}>
+              <GroupLabel>Kaynak</GroupLabel>
+              <Stack spacing={2} sx={{ mb: 2.5 }}>
+                <Grid container spacing={2}>
+                  <Grid size={{ xs: 12, sm: 6 }}>
+                    <TextField
+                      select
+                      label="Taş"
+                      value={form.stoneId}
+                      onChange={(e) =>
+                        setForm((prev) => ({ ...prev, stoneId: String(e.target.value), incomingStockId: '' }))
+                      }
+                      fullWidth
+                    >
+                      {stonesQuery.data?.map((s) => (
+                        <MenuItem key={s.id} value={s.id}>
+                          {s.name} ({s.code})
+                        </MenuItem>
+                      ))}
+                    </TextField>
+                  </Grid>
+                  <Grid size={{ xs: 12, sm: 6 }}>
+                    <TextField
+                      select
+                      label="Gelen Parti/Lot"
+                      value={form.incomingStockId}
+                      onChange={(e) =>
+                        setForm((prev) => ({ ...prev, incomingStockId: String(e.target.value), bundleNumber: '' }))
+                      }
+                      fullWidth
+                      disabled={!form.stoneId}
+                    >
+                      {batchesForStone.map((b) => (
+                        <MenuItem key={b.id} value={b.id}>
+                          {b.batchCode} — {b.arrivalDate}
+                        </MenuItem>
+                      ))}
+                    </TextField>
+                  </Grid>
+                </Grid>
+                <Grid container spacing={2}>
+                  {selectedBatch && selectedBatch.bundleCount > 0 && (
+                    <Grid size={{ xs: 12, sm: 6 }}>
+                      <TextField
+                        select
+                        label="Bundle Seçimi"
+                        value={form.bundleNumber}
+                        onChange={(e) => setForm((prev) => ({ ...prev, bundleNumber: e.target.value }))}
+                        fullWidth
+                        required
+                      >
+                        {createBundleLabels.map((label, index) => (
+                          <MenuItem key={index + 1} value={index + 1}>
+                            {label}
+                          </MenuItem>
+                        ))}
+                      </TextField>
+                    </Grid>
+                  )}
+                  <Grid size={{ xs: 12, sm: selectedBatch && selectedBatch.bundleCount > 0 ? 6 : 12 }}>
+                    <WarehouseField
+                      value={form.warehouse}
+                      onChange={(value) => setForm((prev) => ({ ...prev, warehouse: value }))}
+                    />
+                  </Grid>
+                </Grid>
+              </Stack>
+
+              <GroupLabel>Ölçüler</GroupLabel>
+              <Grid container spacing={2}>
+                <Grid size={{ xs: 12, sm: 6 }}>
+                  <TextField
+                    label="Doku"
+                    value={selectedBatch?.texture ?? ''}
+                    helperText="Partiden otomatik gelir."
+                    fullWidth
+                    disabled
+                  />
+                </Grid>
+                <Grid size={{ xs: 12, sm: 6 }}>
+                  <TextField
+                    label="Kalınlık (cm)"
+                    value={selectedBatch?.thickness ?? ''}
+                    helperText="Partiden otomatik gelir."
+                    fullWidth
+                    disabled
+                  />
+                </Grid>
+                <Grid size={{ xs: 12, sm: 6 }}>
+                  <TextField label="En (cm)" value={form.width} onChange={handleChange('width')} fullWidth />
+                </Grid>
+                <Grid size={{ xs: 12, sm: 6 }}>
+                  <TextField label="Boy (cm)" value={form.height} onChange={handleChange('height')} fullWidth />
+                </Grid>
+              </Grid>
+
+              {error && (
+                <Alert severity="error" sx={{ mt: 2.5 }}>
+                  {error}
+                </Alert>
+              )}
+            </Grid>
+          </Grid>
         </DialogContent>
         <DialogActions>
           <Button onClick={() => setDialogOpen(false)}>Vazgeç</Button>
@@ -1108,139 +1162,154 @@ export function PlatesPage() {
       <Dialog
         open={bulkDialogOpen}
         onClose={() => (bulkSubmitting ? undefined : setBulkDialogOpen(false))}
-        maxWidth="sm"
+        maxWidth="md"
         fullWidth
       >
         <DialogTitle>Çoklu Plaka Ekle</DialogTitle>
         <DialogContent>
-          <Stack spacing={2} sx={{ mt: 1 }}>
-            <Alert severity="info" variant="outlined">
-              Plaka No'ları, taş seçildikten sonra sıradaki numaradan başlayarak sırasıyla atanacak. Görsel
-              seçilirse oluşturulan tüm plakalara eklenir; sonradan bir plakanın görselini değiştirmek
-              diğerlerini etkilemez.
-            </Alert>
-            <TextField
-              select
-              label="Taş"
-              value={bulkForm.stoneId}
-              onChange={(e) =>
-                setBulkForm((prev) => ({ ...prev, stoneId: String(e.target.value), incomingStockId: '' }))
-              }
-              fullWidth
-              disabled={bulkSubmitting}
-            >
-              {stonesQuery.data?.map((s) => (
-                <MenuItem key={s.id} value={s.id}>
-                  {s.name} ({s.code})
-                </MenuItem>
-              ))}
-            </TextField>
-            <TextField
-              select
-              label="Gelen Parti/Lot"
-              value={bulkForm.incomingStockId}
-              onChange={(e) =>
-                setBulkForm((prev) => ({ ...prev, incomingStockId: String(e.target.value), bundleNumber: '' }))
-              }
-              fullWidth
-              disabled={!bulkForm.stoneId || bulkSubmitting}
-            >
-              {bulkBatchesForStone.map((b) => (
-                <MenuItem key={b.id} value={b.id}>
-                  {b.batchCode} — {b.arrivalDate}
-                </MenuItem>
-              ))}
-            </TextField>
-            {bulkSelectedBatch && bulkSelectedBatch.bundleCount > 0 && (
-              <TextField
-                select
-                label="Bundle Seçimi"
-                value={bulkForm.bundleNumber}
-                onChange={(e) => setBulkForm((prev) => ({ ...prev, bundleNumber: e.target.value }))}
-                fullWidth
-                required
-                disabled={bulkSubmitting}
-              >
-                {bulkBundleLabels.map((label, index) => (
-                  <MenuItem key={index + 1} value={index + 1}>
-                    {label}
-                  </MenuItem>
-                ))}
-              </TextField>
-            )}
-            <TextField
-              label="Plaka Sayısı"
-              value={bulkForm.plateCount}
-              onChange={handleBulkChange('plateCount')}
-              helperText="Bu bilgilerle kaç plaka oluşturulacağını belirtir."
-              fullWidth
-              disabled={bulkSubmitting}
-            />
-            <Stack direction="row" spacing={2}>
-              <TextField
-                label="Doku"
-                value={bulkSelectedBatch?.texture ?? ''}
-                helperText="Partiden otomatik gelir."
-                fullWidth
-                disabled
-              />
-              <TextField
-                label="Kalınlık (cm)"
-                value={bulkSelectedBatch?.thickness ?? ''}
-                helperText="Partiden otomatik gelir."
-                fullWidth
-                disabled
-              />
-            </Stack>
-            <Stack direction="row" spacing={2}>
-              <TextField
-                label="En (cm)"
-                value={bulkForm.width}
-                onChange={handleBulkChange('width')}
-                fullWidth
-                disabled={bulkSubmitting}
-              />
-              <TextField
-                label="Boy (cm)"
-                value={bulkForm.height}
-                onChange={handleBulkChange('height')}
-                fullWidth
-                disabled={bulkSubmitting}
-              />
-            </Stack>
-            <WarehouseField
-              value={bulkForm.warehouse}
-              onChange={(value) => setBulkForm((prev) => ({ ...prev, warehouse: value }))}
-            />
-            <Stack direction="row" spacing={1.5} sx={{ alignItems: 'center' }}>
-              <ImageThumbnail
-                src={bulkImage ? URL.createObjectURL(bulkImage) : null}
-                alt="Önizleme"
-                size={56}
-              />
-              <Button
-                variant="outlined"
-                size="small"
-                onClick={() => bulkFileInputRef.current?.click()}
-                disabled={bulkSubmitting}
-              >
-                Görsel Seç
-              </Button>
-              <input
-                ref={bulkFileInputRef}
-                type="file"
-                accept="image/jpeg,image/png,image/webp"
-                hidden
-                onChange={(e) => setBulkImage(e.target.files?.[0] ?? null)}
-              />
-            </Stack>
-            {bulkProgress && (
-              <Alert severity="info">
-                {bulkProgress.done} / {bulkProgress.total} plaka oluşturuldu…
-              </Alert>
-            )}
-            {bulkError && <Alert severity="error">{bulkError}</Alert>}
-          </Stack>
+          <Alert severity="info" variant="outlined" sx={{ mt: 0.5, mb: 2.5 }}>
+            Plaka No'ları, taş seçildikten sonra sıradaki numaradan başlayarak sırasıyla atanacak. Görsel
+            seçilirse oluşturulan tüm plakalara eklenir; sonradan bir plakanın görselini değiştirmek
+            diğerlerini etkilemez.
+          </Alert>
+          <Grid container spacing={3}>
+            <Grid size={{ xs: 12, sm: 'auto' }} sx={{ display: 'flex', justifyContent: { xs: 'center', sm: 'flex-start' } }}>
+              <ImageDropzone file={bulkImage} onChange={setBulkImage} />
+            </Grid>
+            <Grid size={{ xs: 12, sm: 'grow' }}>
+              <GroupLabel>Kaynak</GroupLabel>
+              <Stack spacing={2} sx={{ mb: 2.5 }}>
+                <Grid container spacing={2}>
+                  <Grid size={{ xs: 12, sm: 6 }}>
+                    <TextField
+                      select
+                      label="Taş"
+                      value={bulkForm.stoneId}
+                      onChange={(e) =>
+                        setBulkForm((prev) => ({ ...prev, stoneId: String(e.target.value), incomingStockId: '' }))
+                      }
+                      fullWidth
+                      disabled={bulkSubmitting}
+                    >
+                      {stonesQuery.data?.map((s) => (
+                        <MenuItem key={s.id} value={s.id}>
+                          {s.name} ({s.code})
+                        </MenuItem>
+                      ))}
+                    </TextField>
+                  </Grid>
+                  <Grid size={{ xs: 12, sm: 6 }}>
+                    <TextField
+                      select
+                      label="Gelen Parti/Lot"
+                      value={bulkForm.incomingStockId}
+                      onChange={(e) =>
+                        setBulkForm((prev) => ({ ...prev, incomingStockId: String(e.target.value), bundleNumber: '' }))
+                      }
+                      fullWidth
+                      disabled={!bulkForm.stoneId || bulkSubmitting}
+                    >
+                      {bulkBatchesForStone.map((b) => (
+                        <MenuItem key={b.id} value={b.id}>
+                          {b.batchCode} — {b.arrivalDate}
+                        </MenuItem>
+                      ))}
+                    </TextField>
+                  </Grid>
+                </Grid>
+                <Grid container spacing={2}>
+                  {bulkSelectedBatch && bulkSelectedBatch.bundleCount > 0 && (
+                    <Grid size={{ xs: 12, sm: 6 }}>
+                      <TextField
+                        select
+                        label="Bundle Seçimi"
+                        value={bulkForm.bundleNumber}
+                        onChange={(e) => setBulkForm((prev) => ({ ...prev, bundleNumber: e.target.value }))}
+                        fullWidth
+                        required
+                        disabled={bulkSubmitting}
+                      >
+                        {bulkBundleLabels.map((label, index) => (
+                          <MenuItem key={index + 1} value={index + 1}>
+                            {label}
+                          </MenuItem>
+                        ))}
+                      </TextField>
+                    </Grid>
+                  )}
+                  <Grid size={{ xs: 12, sm: bulkSelectedBatch && bulkSelectedBatch.bundleCount > 0 ? 6 : 12 }}>
+                    <TextField
+                      label="Plaka Sayısı"
+                      value={bulkForm.plateCount}
+                      onChange={handleBulkChange('plateCount')}
+                      helperText="Bu bilgilerle kaç plaka oluşturulacağını belirtir."
+                      fullWidth
+                      disabled={bulkSubmitting}
+                    />
+                  </Grid>
+                </Grid>
+                <Grid container spacing={2}>
+                  <Grid size={12}>
+                    <WarehouseField
+                      value={bulkForm.warehouse}
+                      onChange={(value) => setBulkForm((prev) => ({ ...prev, warehouse: value }))}
+                    />
+                  </Grid>
+                </Grid>
+              </Stack>
+
+              <GroupLabel>Ölçüler</GroupLabel>
+              <Grid container spacing={2}>
+                <Grid size={{ xs: 12, sm: 6 }}>
+                  <TextField
+                    label="Doku"
+                    value={bulkSelectedBatch?.texture ?? ''}
+                    helperText="Partiden otomatik gelir."
+                    fullWidth
+                    disabled
+                  />
+                </Grid>
+                <Grid size={{ xs: 12, sm: 6 }}>
+                  <TextField
+                    label="Kalınlık (cm)"
+                    value={bulkSelectedBatch?.thickness ?? ''}
+                    helperText="Partiden otomatik gelir."
+                    fullWidth
+                    disabled
+                  />
+                </Grid>
+                <Grid size={{ xs: 12, sm: 6 }}>
+                  <TextField
+                    label="En (cm)"
+                    value={bulkForm.width}
+                    onChange={handleBulkChange('width')}
+                    fullWidth
+                    disabled={bulkSubmitting}
+                  />
+                </Grid>
+                <Grid size={{ xs: 12, sm: 6 }}>
+                  <TextField
+                    label="Boy (cm)"
+                    value={bulkForm.height}
+                    onChange={handleBulkChange('height')}
+                    fullWidth
+                    disabled={bulkSubmitting}
+                  />
+                </Grid>
+              </Grid>
+
+              {bulkProgress && (
+                <Alert severity="info" sx={{ mt: 2.5 }}>
+                  {bulkProgress.done} / {bulkProgress.total} plaka oluşturuldu…
+                </Alert>
+              )}
+              {bulkError && (
+                <Alert severity="error" sx={{ mt: 2.5 }}>
+                  {bulkError}
+                </Alert>
+              )}
+            </Grid>
+          </Grid>
         </DialogContent>
         <DialogActions>
           <Button onClick={() => setBulkDialogOpen(false)} disabled={bulkSubmitting}>
@@ -1266,51 +1335,77 @@ export function PlatesPage() {
         <DialogTitle>Plakayı Düzenle</DialogTitle>
         <DialogContent>
           {editForm && (
-            <Stack spacing={2} sx={{ mt: 1 }}>
-              <TextField label="Taş" value={editingPlate?.stoneName ?? ''} fullWidth disabled />
-              <TextField label="Parti/Lot Kodu" value={editingPlate?.batchCode ?? ''} fullWidth disabled />
-              <TextField label="Plaka No" value={editForm.plateNo} onChange={handleEditChange('plateNo')} fullWidth />
-              {editBatch && editBatch.bundleCount > 0 && (
-                <TextField
-                  select
-                  label="Bundle Seçimi"
-                  value={editForm.bundleNumber}
-                  onChange={handleEditChange('bundleNumber')}
-                  fullWidth
-                  required
-                >
-                  {editBundleLabels.map((label, index) => (
-                    <MenuItem key={index + 1} value={index + 1}>
-                      {label}
-                    </MenuItem>
-                  ))}
-                </TextField>
+            <Stack sx={{ mt: 0.5 }}>
+              <GroupLabel>Kaynak</GroupLabel>
+              <Grid container spacing={2} sx={{ mb: 2.5 }}>
+                <Grid size={{ xs: 12, sm: 6 }}>
+                  <TextField label="Taş" value={editingPlate?.stoneName ?? ''} fullWidth disabled />
+                </Grid>
+                <Grid size={{ xs: 12, sm: 6 }}>
+                  <TextField label="Parti/Lot Kodu" value={editingPlate?.batchCode ?? ''} fullWidth disabled />
+                </Grid>
+                <Grid size={{ xs: 12, sm: editBatch && editBatch.bundleCount > 0 ? 6 : 12 }}>
+                  <TextField label="Plaka No" value={editForm.plateNo} onChange={handleEditChange('plateNo')} fullWidth />
+                </Grid>
+                {editBatch && editBatch.bundleCount > 0 && (
+                  <Grid size={{ xs: 12, sm: 6 }}>
+                    <TextField
+                      select
+                      label="Bundle Seçimi"
+                      value={editForm.bundleNumber}
+                      onChange={handleEditChange('bundleNumber')}
+                      fullWidth
+                      required
+                    >
+                      {editBundleLabels.map((label, index) => (
+                        <MenuItem key={index + 1} value={index + 1}>
+                          {label}
+                        </MenuItem>
+                      ))}
+                    </TextField>
+                  </Grid>
+                )}
+                <Grid size={12}>
+                  <WarehouseField
+                    value={editForm.warehouse}
+                    onChange={(value) => setEditForm((prev) => (prev ? { ...prev, warehouse: value } : prev))}
+                  />
+                </Grid>
+              </Grid>
+
+              <GroupLabel>Ölçüler</GroupLabel>
+              <Grid container spacing={2}>
+                <Grid size={{ xs: 12, sm: 6 }}>
+                  <TextField
+                    label="Doku"
+                    value={editingPlate?.texture ?? ''}
+                    helperText="Partiden otomatik gelir."
+                    fullWidth
+                    disabled
+                  />
+                </Grid>
+                <Grid size={{ xs: 12, sm: 6 }}>
+                  <TextField
+                    label="Kalınlık (cm)"
+                    value={editingPlate?.thickness ?? ''}
+                    helperText="Partiden otomatik gelir."
+                    fullWidth
+                    disabled
+                  />
+                </Grid>
+                <Grid size={{ xs: 12, sm: 6 }}>
+                  <TextField label="En (cm)" value={editForm.width} onChange={handleEditChange('width')} fullWidth />
+                </Grid>
+                <Grid size={{ xs: 12, sm: 6 }}>
+                  <TextField label="Boy (cm)" value={editForm.height} onChange={handleEditChange('height')} fullWidth />
+                </Grid>
+              </Grid>
+
+              {editError && (
+                <Alert severity="error" sx={{ mt: 2.5 }}>
+                  {editError}
+                </Alert>
               )}
-              <Stack direction="row" spacing={2}>
-                <TextField
-                  label="Doku"
-                  value={editingPlate?.texture ?? ''}
-                  helperText="Partiden otomatik gelir."
-                  fullWidth
-                  disabled
-                />
-                <TextField
-                  label="Kalınlık (cm)"
-                  value={editingPlate?.thickness ?? ''}
-                  helperText="Partiden otomatik gelir."
-                  fullWidth
-                  disabled
-                />
-              </Stack>
-              <Stack direction="row" spacing={2}>
-                <TextField label="En (cm)" value={editForm.width} onChange={handleEditChange('width')} fullWidth />
-                <TextField label="Boy (cm)" value={editForm.height} onChange={handleEditChange('height')} fullWidth />
-              </Stack>
-              <WarehouseField
-                value={editForm.warehouse}
-                onChange={(value) => setEditForm((prev) => (prev ? { ...prev, warehouse: value } : prev))}
-              />
-              {editError && <Alert severity="error">{editError}</Alert>}
             </Stack>
           )}
         </DialogContent>
@@ -1804,12 +1899,12 @@ export function PlatesPage() {
 
           {offerSaveSuccess && (
             <Alert severity="success" sx={{ mt: 2 }}>
-              Teklif kaydedildi. "Satış Yönetimi &gt; Teklifler" sayfasından görüntüleyebilirsiniz.
+              Teklif taslak olarak kaydedildi. "Satış Yönetimi &gt; Teklifler" sayfasından görüntüleyebilirsiniz.
             </Alert>
           )}
           {offerEmailSuccess && (
             <Alert severity="success" sx={{ mt: 2 }}>
-              Teklif e-postası gönderildi.
+              Teklif e-postası gönderildi ve tekliflere kaydedildi.
             </Alert>
           )}
           {offerExportError && (
@@ -1834,7 +1929,7 @@ export function PlatesPage() {
             disabled={saveOfferMutation.isPending || !offerCompany || selectedPlates.length === 0}
             onClick={handleSaveOffer}
           >
-            {saveOfferMutation.isPending ? 'Kaydediliyor…' : 'Teklifi Kaydet'}
+            {saveOfferMutation.isPending ? 'Kaydediliyor…' : 'Teklifi Taslak Olarak Kaydet'}
           </Button>
         </DialogActions>
       </Dialog>

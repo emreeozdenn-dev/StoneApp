@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useMemo, useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import {
   Alert,
@@ -32,14 +32,14 @@ import {
 import { adminResetTwoFactor } from '../../api/twoFactor'
 import { useCurrentUser } from '../../auth/useCurrentUser'
 import { ColumnSettingsButton } from '../../components/common/ColumnSettingsButton'
+import { StatTile } from '../../components/common/StatTile'
 import { type ColumnDef, useColumnPreferences } from '../../components/common/useColumnPreferences'
 import { useDraggableColumns } from '../../components/common/useDraggableColumns'
 
-type UserColumnKey = 'fullName' | 'username' | 'email' | 'role' | 'status' | 'twoFactor' | 'lastLogin' | 'active'
+type UserColumnKey = 'fullName' | 'email' | 'role' | 'status' | 'twoFactor' | 'lastLogin' | 'active'
 
 const USER_COLUMNS: ColumnDef<UserColumnKey>[] = [
-  { key: 'fullName', label: 'Ad Soyad' },
-  { key: 'username', label: 'Kullanıcı Adı' },
+  { key: 'fullName', label: 'Kullanıcı' },
   { key: 'email', label: 'E-posta' },
   { key: 'role', label: 'Rol' },
   { key: 'status', label: 'Durum' },
@@ -47,6 +47,10 @@ const USER_COLUMNS: ColumnDef<UserColumnKey>[] = [
   { key: 'lastLogin', label: 'Son Giriş' },
   { key: 'active', label: 'Aktif', align: 'right' },
 ]
+
+function initialsOf(firstName: string, lastName: string): string {
+  return `${firstName.charAt(0)}${lastName.charAt(0)}`.toUpperCase()
+}
 
 function generatePassword(length = 12): string {
   const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnpqrstuvwxyz23456789!@#$%'
@@ -153,12 +157,48 @@ export function UsersPage() {
   const columnPrefs = useColumnPreferences('users', USER_COLUMNS)
   const draggableColumns = useDraggableColumns(columnPrefs.reorderTo)
 
+  const userStats = useMemo(() => {
+    const all = usersQuery.data ?? []
+    return {
+      total: all.length,
+      active: all.filter((u) => u.status === 'Aktif').length,
+      twoFactorEnabled: all.filter((u) => u.twoFactorEnabled).length,
+      inactive: all.filter((u) => u.status !== 'Aktif').length,
+    }
+  }, [usersQuery.data])
+
   function renderUserCell(key: UserColumnKey, u: UserListItem) {
     switch (key) {
       case 'fullName':
-        return `${u.firstName} ${u.lastName}`
-      case 'username':
-        return u.username
+        return (
+          <Stack direction="row" spacing={1.25} sx={{ alignItems: 'center' }}>
+            <Box
+              sx={{
+                width: 32,
+                height: 32,
+                borderRadius: '50%',
+                bgcolor: 'primary.light',
+                color: 'primary.contrastText',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                fontSize: 12,
+                fontWeight: 700,
+                flexShrink: 0,
+              }}
+            >
+              {initialsOf(u.firstName, u.lastName)}
+            </Box>
+            <Box>
+              <Typography variant="body2" sx={{ fontWeight: 500, lineHeight: 1.3 }}>
+                {u.firstName} {u.lastName}
+              </Typography>
+              <Typography variant="caption" color="text.secondary">
+                @{u.username}
+              </Typography>
+            </Box>
+          </Stack>
+        )
       case 'email':
         return u.email
       case 'role':
@@ -207,6 +247,13 @@ export function UsersPage() {
             Kullanıcı Ekle
           </Button>
         </Stack>
+      </Stack>
+
+      <Stack direction="row" sx={{ flexWrap: 'wrap', gap: 1.75, mb: 3 }}>
+        <StatTile label="Toplam Kullanıcı" value={userStats.total} />
+        <StatTile label="Aktif" value={userStats.active} />
+        <StatTile label="2FA Etkin" value={userStats.twoFactorEnabled} />
+        <StatTile label="Pasif" value={userStats.inactive} status={userStats.inactive > 0 ? 'warning' : undefined} />
       </Stack>
 
       <Box sx={{ overflowX: 'auto' }}>

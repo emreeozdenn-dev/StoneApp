@@ -10,13 +10,17 @@ import {
   DialogActions,
   DialogContent,
   DialogTitle,
-  Divider,
   FormControlLabel,
   List,
   ListItemButton,
   ListItemText,
   Paper,
   Stack,
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableRow,
   TextField,
   Typography,
 } from '@mui/material'
@@ -29,9 +33,44 @@ import {
   updateRoleName,
   updateRolePermissions,
 } from '../../api/roles'
+import { GroupLabel } from '../../components/common/GroupLabel'
 import { PERMISSION_GROUPS, PERMISSION_LABELS } from './permissionLabels'
 
 type FeedbackState = { kind: 'success' | 'error'; message: string } | null
+
+const CRUD_ACTIONS = ['view', 'create', 'edit', 'delete'] as const
+const CRUD_ACTION_LABELS: Record<(typeof CRUD_ACTIONS)[number], string> = {
+  view: 'Görüntüle',
+  create: 'Ekle',
+  edit: 'Düzenle',
+  delete: 'Sil',
+}
+
+interface MatrixGroup {
+  title: string
+  prefix: string
+  keys: string[]
+}
+
+function splitGroups(groups: { title: string; keys: string[] }[]): {
+  matrixGroups: MatrixGroup[]
+  listGroups: { title: string; keys: string[] }[]
+} {
+  const matrixGroups: MatrixGroup[] = []
+  const listGroups: { title: string; keys: string[] }[] = []
+  for (const group of groups) {
+    const parts = group.keys.map((k) => k.split('.'))
+    const prefixes = new Set(parts.map((p) => p[0]))
+    const actions = parts.map((p) => p[1])
+    const isCrud = prefixes.size === 1 && actions.length > 1 && actions.every((a) => (CRUD_ACTIONS as readonly string[]).includes(a))
+    if (isCrud) {
+      matrixGroups.push({ title: group.title, prefix: [...prefixes][0], keys: group.keys })
+    } else {
+      listGroups.push(group)
+    }
+  }
+  return { matrixGroups, listGroups }
+}
 
 export function RolesPage() {
   const queryClient = useQueryClient()
@@ -70,6 +109,8 @@ export function RolesPage() {
     if (ungrouped.length > 0) groups.push({ title: 'Diğer', keys: ungrouped })
     return groups.filter((g) => g.keys.length > 0)
   }, [permissionsQuery.data])
+
+  const { matrixGroups, listGroups } = useMemo(() => splitGroups(groups), [groups])
 
   const toggleKey = (key: string) => {
     setSelectedKeys((prev) => {
@@ -244,11 +285,49 @@ export function RolesPage() {
               </Typography>
 
               <Stack spacing={3}>
-                {groups.map((group) => (
+                {matrixGroups.length > 0 && (
+                  <Box>
+                    <GroupLabel>İşlem Yetkileri</GroupLabel>
+                    <Table size="small">
+                      <TableHead>
+                        <TableRow>
+                          <TableCell />
+                          {CRUD_ACTIONS.map((action) => (
+                            <TableCell key={action} align="center">
+                              {CRUD_ACTION_LABELS[action]}
+                            </TableCell>
+                          ))}
+                        </TableRow>
+                      </TableHead>
+                      <TableBody>
+                        {matrixGroups.map((group) => (
+                          <TableRow key={group.title}>
+                            <TableCell sx={{ fontWeight: 500 }}>{group.title}</TableCell>
+                            {CRUD_ACTIONS.map((action) => {
+                              const key = `${group.prefix}.${action}`
+                              const exists = group.keys.includes(key)
+                              return (
+                                <TableCell key={action} align="center">
+                                  {exists && (
+                                    <Checkbox
+                                      size="small"
+                                      checked={selectedKeys.has(key)}
+                                      onChange={() => toggleKey(key)}
+                                    />
+                                  )}
+                                </TableCell>
+                              )
+                            })}
+                          </TableRow>
+                        ))}
+                      </TableBody>
+                    </Table>
+                  </Box>
+                )}
+
+                {listGroups.map((group) => (
                   <Box key={group.title}>
-                    <Typography variant="subtitle2" sx={{ fontWeight: 600, mb: 1 }}>
-                      {group.title}
-                    </Typography>
+                    <GroupLabel>{group.title}</GroupLabel>
                     <Stack direction="row" spacing={2} sx={{ flexWrap: 'wrap' }}>
                       {group.keys.map((key) => (
                         <FormControlLabel
@@ -258,7 +337,6 @@ export function RolesPage() {
                         />
                       ))}
                     </Stack>
-                    <Divider sx={{ mt: 2 }} />
                   </Box>
                 ))}
               </Stack>

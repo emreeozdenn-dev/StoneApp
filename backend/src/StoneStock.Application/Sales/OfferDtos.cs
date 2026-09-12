@@ -32,6 +32,7 @@ public sealed record OfferDto(
     DateTimeOffset CreatedAt,
     bool IsSold,
     DateTimeOffset? SoldAt,
+    string Status,
     IReadOnlyList<OfferItemDto> Items);
 
 public sealed record CreateOfferItemRequest(
@@ -58,4 +59,5 @@ public sealed record CreateOfferRequest(
     string? DeliveryAddress,
     bool ShippingIncluded,
     decimal? UsdRate,
+    string? Status,
     IReadOnlyList<CreateOfferItemRequest> Items);

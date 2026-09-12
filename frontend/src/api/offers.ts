@@ -33,7 +33,15 @@ export interface Offer {
   createdAt: string
   isSold: boolean
   soldAt: string | null
+  status: OfferStatus
   items: OfferItem[]
+}
+
+export type OfferStatus = 'Taslak' | 'Gonderildi'
+
+export const OFFER_STATUS_LABELS: Record<OfferStatus, string> = {
+  Taslak: 'Teklif Taslak Olarak Kaydedildi',
+  Gonderildi: 'Teklif Gönderildi',
 }
 
 export interface CreateOfferItemPayload {
@@ -61,6 +69,7 @@ export interface CreateOfferPayload {
   deliveryAddress: string | null
   shippingIncluded: boolean
   usdRate: number | null
+  status: OfferStatus
   items: CreateOfferItemPayload[]
 }
 
