@@ -1627,9 +1627,11 @@ export function PlatesPage() {
         </DialogActions>
       </Dialog>
 
-      <Dialog open={offerDialogOpen} onClose={closeOfferDialog} maxWidth="md" fullWidth>
+      <Dialog open={offerDialogOpen} onClose={closeOfferDialog} maxWidth="xl" fullWidth>
         <DialogTitle>Teklif Gönder</DialogTitle>
         <DialogContent>
+          <Box sx={{ display: 'flex', flexDirection: { xs: 'column', md: 'row' }, gap: 3 }}>
+            <Box sx={{ flex: 1, minWidth: 0 }}>
           <Grid container spacing={2} sx={{ mt: 0.5, mb: 3 }}>
             <Grid size={{ xs: 12, sm: 6 }}>
               <TextField
@@ -1825,43 +1827,6 @@ export function PlatesPage() {
           <Divider sx={{ mb: 3 }} />
 
           <Typography variant="subtitle2" sx={{ fontWeight: 600, mb: 1 }}>
-            Teklif Önizlemesi
-          </Typography>
-          <OfferPreviewDocument
-            containerRef={(el) => {
-              offerContainerRef.current = el
-            }}
-            companyName={offerCompany}
-            companyAddress={offerCompanyAddress}
-            offerDate={offerDate}
-            currency={offerCurrency}
-            vatIncluded={offerVatIncluded === 'Dahil'}
-            validityDays={offerValidityDays}
-            deliveryMethod={offerDeliveryMethod}
-            deliveryAddress={offerDeliveryAddress}
-            shippingIncluded={offerShippingIncluded === 'Dahil'}
-            usdRate={offerEffectiveUsdRate}
-            total={offerTotal}
-            brandingCompanyName={offerBrandingQuery.data?.companyName}
-            brandingLogoUrl={offerBrandingQuery.data?.logoUrl}
-            items={offerLines.map((line) => {
-              const rep = line.plates[0]
-              return {
-                stoneName: rep.stoneName,
-                widthCm: metersToCm(rep.width),
-                heightCm: metersToCm(rep.height),
-                thicknessCm: rep.thickness,
-                texture: rep.texture,
-                areaM2: rep.area,
-                unitPrice: Number(getLineUnitPrice(line)) || 0,
-                quantity: line.quantity,
-              }
-            })}
-          />
-
-          <Divider sx={{ my: 3 }} />
-
-          <Typography variant="subtitle2" sx={{ fontWeight: 600, mb: 1 }}>
             E-posta Gönderimi
           </Typography>
           <Grid container spacing={2} sx={{ mb: 1 }}>
@@ -1912,6 +1877,49 @@ export function PlatesPage() {
               {offerExportError}
             </Alert>
           )}
+            </Box>
+
+            <Divider orientation="vertical" flexItem sx={{ display: { xs: 'none', md: 'block' } }} />
+
+            <Box sx={{ flex: 1, minWidth: 0 }}>
+              <Box sx={{ position: { md: 'sticky' }, top: 16 }}>
+                <Typography variant="subtitle2" sx={{ fontWeight: 600, mb: 1 }}>
+                  Teklif Önizlemesi
+                </Typography>
+                <OfferPreviewDocument
+                  containerRef={(el) => {
+                    offerContainerRef.current = el
+                  }}
+                  companyName={offerCompany}
+                  companyAddress={offerCompanyAddress}
+                  offerDate={offerDate}
+                  currency={offerCurrency}
+                  vatIncluded={offerVatIncluded === 'Dahil'}
+                  validityDays={offerValidityDays}
+                  deliveryMethod={offerDeliveryMethod}
+                  deliveryAddress={offerDeliveryAddress}
+                  shippingIncluded={offerShippingIncluded === 'Dahil'}
+                  usdRate={offerEffectiveUsdRate}
+                  total={offerTotal}
+                  brandingCompanyName={offerBrandingQuery.data?.companyName}
+                  brandingLogoUrl={offerBrandingQuery.data?.logoUrl}
+                  items={offerLines.map((line) => {
+                    const rep = line.plates[0]
+                    return {
+                      stoneName: rep.stoneName,
+                      widthCm: metersToCm(rep.width),
+                      heightCm: metersToCm(rep.height),
+                      thicknessCm: rep.thickness,
+                      texture: rep.texture,
+                      areaM2: rep.area,
+                      unitPrice: Number(getLineUnitPrice(line)) || 0,
+                      quantity: line.quantity,
+                    }
+                  })}
+                />
+              </Box>
+            </Box>
+          </Box>
         </DialogContent>
         <DialogActions>
           <Button onClick={closeOfferDialog}>Kapat</Button>
