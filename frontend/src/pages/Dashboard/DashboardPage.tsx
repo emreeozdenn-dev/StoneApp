@@ -12,15 +12,16 @@ import {
   Table,
   TableBody,
   TableCell,
+  TableHead,
   TableRow,
   Typography,
 } from '@mui/material'
 import DiamondIcon from '@mui/icons-material/DiamondOutlined'
 import WarningAmberIcon from '@mui/icons-material/WarningAmberOutlined'
 import ViewModuleIcon from '@mui/icons-material/ViewModuleOutlined'
+import LayersIcon from '@mui/icons-material/LayersOutlined'
 import TrendingUpIcon from '@mui/icons-material/TrendingUpOutlined'
 import CurrencyExchangeIcon from '@mui/icons-material/CurrencyExchangeOutlined'
-import WarehouseIcon from '@mui/icons-material/WarehouseOutlined'
 import QrCodeScannerIcon from '@mui/icons-material/QrCodeScannerOutlined'
 import { fetchIncomingStocks, fetchPlates, fetchStones } from '../../api/catalog'
 import { fetchExchangeRates } from '../../api/exchangeRates'
@@ -28,7 +29,6 @@ import { fetchQrScanHistory } from '../../api/qrScan'
 import { hasPermission, useCurrentUser } from '../../auth/useCurrentUser'
 
 export function DashboardPage() {
-  const theme = useTheme()
   const { user } = useCurrentUser()
   const permissions = user?.permissions
 
@@ -87,30 +87,86 @@ export function DashboardPage() {
     [platesQuery.data],
   )
 
-  const warehouseBreakdown = useMemo(() => {
-    const totals = new Map<string, number>()
-    for (const p of activePlates) {
-      totals.set(p.warehouse, (totals.get(p.warehouse) ?? 0) + p.area)
+  // Konsinye partilerden gelen, satılmamış (Aktif veya Rezerve) plakalar, taş bazında
+  const consignment = useMemo(() => {
+    const plates = (platesQuery.data ?? []).filter(
+      (p) => p.supplyType === 'Konsinye' && (p.status === 'Aktif' || p.status === 'Rezerve'),
+    )
+    const stoneCodes = new Map((stonesQuery.data ?? []).map((s) => [s.id, s.code]))
+    const suppliersByStock = new Map((incomingQuery.data ?? []).map((r) => [r.id, r.supplier]))
+
+    const groups = new Map<
+      number,
+      { stoneId: number; stoneName: string; count: number; reserved: number; area: number; suppliers: Set<string> }
+    >()
+    for (const p of plates) {
+      let g = groups.get(p.stoneId)
+      if (!g) {
+        g = { stoneId: p.stoneId, stoneName: p.stoneName, count: 0, reserved: 0, area: 0, suppliers: new Set() }
+        groups.set(p.stoneId, g)
+      }
+      g.count += 1
+      g.area += p.area
+      if (p.status === 'Rezerve') g.reserved += 1
+      const supplier = suppliersByStock.get(p.incomingStockId)?.trim()
+      if (supplier) g.suppliers.add(supplier)
     }
-    const entries = [...totals.entries()].sort((a, b) => b[1] - a[1])
-    const max = entries[0]?.[1] ?? 0
-    return entries.map(([warehouse, area]) => ({
-      warehouse,
-      area,
-      pct: max > 0 ? (area / max) * 100 : 0,
-    }))
-  }, [activePlates])
+
+    const rows = [...groups.values()].sort((a, b) => b.area - a.area)
+    const maxArea = rows[0]?.area ?? 0
+    return {
+      rows: rows.map((r) => ({
+        ...r,
+        code: stoneCodes.get(r.stoneId),
+        suppliers: [...r.suppliers].sort((a, b) => a.localeCompare(b, 'tr')),
+        pct: maxArea > 0 ? (r.area / maxArea) * 100 : 0,
+      })),
+      totalCount: plates.length,
+      totalArea: plates.reduce((sum, p) => sum + p.area, 0),
+    }
+  }, [platesQuery.data, stonesQuery.data, incomingQuery.data])
 
   const recentScans = useMemo(() => (qrHistoryQuery.data ?? []).slice(0, 5), [qrHistoryQuery.data])
 
   return (
     <Box>
-      <Typography variant="h5" sx={{ fontWeight: 600, mb: 0.5 }}>
-        Dashboard
-      </Typography>
-      <Typography variant="body2" color="text.secondary" sx={{ mb: 3 }}>
-        Hoş geldiniz, {user?.firstName} {user?.lastName}.
-      </Typography>
+      <Stack
+        direction={{ xs: 'column', sm: 'row' }}
+        spacing={1.5}
+        sx={{ justifyContent: 'space-between', alignItems: { xs: 'flex-start', sm: 'center' }, mb: 3 }}
+      >
+        <Box>
+          <Typography variant="h5" sx={{ fontWeight: 600, mb: 0.5 }}>
+            Dashboard
+          </Typography>
+          <Typography variant="body2" color="text.secondary">
+            Hoş geldiniz, {user?.firstName} {user?.lastName}.
+          </Typography>
+        </Box>
+        {ratesQuery.data && (ratesQuery.data.usdTry || ratesQuery.data.eurTry) && (
+          <Paper
+            variant="outlined"
+            sx={{ px: 1.5, py: 0.75, display: 'flex', alignItems: 'center', gap: 1.5, flexWrap: 'wrap' }}
+          >
+            <CurrencyExchangeIcon fontSize="small" sx={{ color: 'primary.main' }} />
+            <Typography variant="body2" sx={{ fontVariantNumeric: 'tabular-nums' }}>
+              <Typography component="span" variant="caption" color="text.secondary">
+                USD{' '}
+              </Typography>
+              <b>{ratesQuery.data.usdTry ? `${ratesQuery.data.usdTry.toLocaleString('tr-TR')} ₺` : '—'}</b>
+            </Typography>
+            <Typography variant="body2" sx={{ fontVariantNumeric: 'tabular-nums' }}>
+              <Typography component="span" variant="caption" color="text.secondary">
+                EUR{' '}
+              </Typography>
+              <b>{ratesQuery.data.eurTry ? `${ratesQuery.data.eurTry.toLocaleString('tr-TR')} ₺` : '—'}</b>
+            </Typography>
+            <Typography variant="caption" color="text.secondary">
+              TCMB, {ratesQuery.data.date}
+            </Typography>
+          </Paper>
+        )}
+      </Stack>
 
       <Stack direction="row" sx={{ flexWrap: 'wrap', gap: 2, mb: 3 }}>
         {canSeeStones && (
@@ -119,14 +175,6 @@ export function DashboardPage() {
             label="Taş Çeşidi"
             value={stonesQuery.data?.length ?? '—'}
             sub={`${stonesQuery.data?.filter((s) => s.status === 'Aktif').length ?? 0} aktif`}
-          />
-        )}
-        {canSeeStones && (
-          <StatTile
-            icon={<WarningAmberIcon fontSize="small" />}
-            label="Düşük Stok Uyarısı"
-            value={lowStockStones.length}
-            status={lowStockStones.length > 0 ? 'warning' : 'success'}
           />
         )}
         {canSeePlates && (
@@ -145,38 +193,23 @@ export function DashboardPage() {
             status="success"
           />
         )}
-        {ratesQuery.data && (ratesQuery.data.usdTry || ratesQuery.data.eurTry) && (
-          <Paper variant="outlined" sx={{ p: 2.5, flex: '1 1 200px', minWidth: 200 }}>
-            <Stack direction="row" spacing={1.25} sx={{ alignItems: 'center', mb: 1.5 }}>
-              <IconBadge color={theme.palette.primary.main}>
-                <CurrencyExchangeIcon fontSize="small" />
-              </IconBadge>
-              <Typography variant="body2" color="text.secondary" sx={{ fontWeight: 500 }}>
-                Güncel Döviz Kuru
-              </Typography>
-            </Stack>
-            <Stack direction="row" spacing={3}>
-              <Box>
-                <Typography variant="h5" sx={{ fontWeight: 700 }}>
-                  {ratesQuery.data.usdTry ? `${ratesQuery.data.usdTry.toLocaleString('tr-TR')} ₺` : '—'}
-                </Typography>
-                <Typography variant="caption" color="text.secondary">
-                  1 USD
-                </Typography>
-              </Box>
-              <Box>
-                <Typography variant="h5" sx={{ fontWeight: 700 }}>
-                  {ratesQuery.data.eurTry ? `${ratesQuery.data.eurTry.toLocaleString('tr-TR')} ₺` : '—'}
-                </Typography>
-                <Typography variant="caption" color="text.secondary">
-                  1 EUR
-                </Typography>
-              </Box>
-            </Stack>
-            <Typography variant="caption" color="text.secondary">
-              TCMB, {ratesQuery.data.date}
-            </Typography>
-          </Paper>
+        {canSeePlates && (
+          <StatTile
+            icon={<LayersIcon fontSize="small" />}
+            label="Konsinye Stok"
+            value={`${formatArea(consignment.totalArea)} m²`}
+            sub={`${consignment.rows.length} taş çeşidi · ${consignment.totalCount} plaka`}
+            status="warning"
+            valueColor="text.primary"
+          />
+        )}
+        {canSeeStones && (
+          <StatTile
+            icon={<WarningAmberIcon fontSize="small" />}
+            label="Düşük Stok Uyarısı"
+            value={lowStockStones.length}
+            status={lowStockStones.length > 0 ? 'warning' : 'success'}
+          />
         )}
       </Stack>
 
@@ -253,6 +286,88 @@ export function DashboardPage() {
         </Stack>
 
         <Stack spacing={2} sx={{ flex: { lg: 1 }, width: '100%', minWidth: 0 }}>
+          {canSeePlates && (
+            <Paper variant="outlined" sx={{ p: 2.5 }}>
+              <PanelHead
+                title="Konsinye Stok (Satılmamış)"
+                icon={<LayersIcon fontSize="small" />}
+                to={consignment.rows.length > 0 ? '/plakalar' : undefined}
+                linkLabel="Plakalara git"
+              />
+              {consignment.rows.length === 0 ? (
+                <Typography variant="body2" color="text.secondary">
+                  Satılmamış konsinye plaka yok.
+                </Typography>
+              ) : (
+                <>
+                  <Table size="small" sx={{ '& td, & th': { fontVariantNumeric: 'tabular-nums' } }}>
+                    <TableHead>
+                      <TableRow>
+                        <TableCell sx={{ pl: 0, color: 'text.secondary' }}>Taş</TableCell>
+                        <TableCell sx={{ color: 'text.secondary', textAlign: 'right !important' }}>Plaka</TableCell>
+                        <TableCell sx={{ pr: 0, color: 'text.secondary', textAlign: 'right !important' }}>
+                          Toplam m²
+                        </TableCell>
+                      </TableRow>
+                    </TableHead>
+                    <TableBody>
+                      {consignment.rows.map((r) => (
+                        <TableRow key={r.stoneId}>
+                          <TableCell sx={{ pl: 0 }}>
+                            <Link component={RouterLink} to="/plakalar" underline="hover" variant="body2">
+                              {r.stoneName}
+                            </Link>
+                            {(r.code || r.suppliers.length > 0) && (
+                              <Typography variant="caption" color="text.secondary" sx={{ display: 'block' }}>
+                                {[r.code, r.suppliers.join(', ')].filter(Boolean).join(' · ')}
+                              </Typography>
+                            )}
+                            <LinearProgress
+                              variant="determinate"
+                              value={r.pct}
+                              sx={{ mt: 0.75, height: 4, borderRadius: 2, bgcolor: 'action.hover' }}
+                            />
+                          </TableCell>
+                          <TableCell sx={{ textAlign: 'right !important', whiteSpace: 'nowrap' }}>
+                            {r.count}
+                            {r.reserved > 0 && (
+                              <Chip
+                                label={`${r.reserved} rezerve`}
+                                size="small"
+                                color="warning"
+                                variant="outlined"
+                                sx={{ ml: 1, height: 20, fontSize: 11 }}
+                              />
+                            )}
+                          </TableCell>
+                          <TableCell sx={{ pr: 0, textAlign: 'right !important', whiteSpace: 'nowrap' }}>
+                            {formatArea(r.area)}
+                          </TableCell>
+                        </TableRow>
+                      ))}
+                      <TableRow>
+                        <TableCell sx={{ pl: 0, fontWeight: 700, borderBottom: 'none' }}>
+                          Toplam · {consignment.rows.length} taş
+                        </TableCell>
+                        <TableCell sx={{ fontWeight: 700, borderBottom: 'none', textAlign: 'right !important' }}>
+                          {consignment.totalCount}
+                        </TableCell>
+                        <TableCell
+                          sx={{ pr: 0, fontWeight: 700, borderBottom: 'none', textAlign: 'right !important' }}
+                        >
+                          {formatArea(consignment.totalArea)}
+                        </TableCell>
+                      </TableRow>
+                    </TableBody>
+                  </Table>
+                  <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mt: 1 }}>
+                    Durumu Aktif veya Rezerve olan konsinye plakalar.
+                  </Typography>
+                </>
+              )}
+            </Paper>
+          )}
+
           {canSeeStones && (
             <Paper variant="outlined" sx={{ p: 2.5 }}>
               <PanelHead title="Düşük Stok Uyarıları" />
@@ -274,31 +389,6 @@ export function DashboardPage() {
                   ))}
                 </Stack>
               )}
-            </Paper>
-          )}
-
-          {canSeePlates && warehouseBreakdown.length > 0 && (
-            <Paper variant="outlined" sx={{ p: 2.5 }}>
-              <PanelHead title="Depo Bazında Aktif Stok" icon={<WarehouseIcon fontSize="small" />} />
-              <Stack spacing={1.5}>
-                {warehouseBreakdown.map((w) => (
-                  <Box key={w.warehouse}>
-                    <Stack direction="row" sx={{ justifyContent: 'space-between', mb: 0.5 }}>
-                      <Typography variant="body2" sx={{ fontWeight: 500 }}>
-                        {w.warehouse}
-                      </Typography>
-                      <Typography variant="caption" color="text.secondary">
-                        {w.area.toLocaleString('tr-TR')} m²
-                      </Typography>
-                    </Stack>
-                    <LinearProgress
-                      variant="determinate"
-                      value={w.pct}
-                      sx={{ height: 5, borderRadius: 3, bgcolor: 'action.hover' }}
-                    />
-                  </Box>
-                ))}
-              </Stack>
             </Paper>
           )}
 
@@ -365,7 +455,21 @@ function IconBadge({ children, color }: { children: ReactNode; color: string }) 
   )
 }
 
-function PanelHead({ title, icon, to }: { title: string; icon?: ReactNode; to?: string }) {
+function formatArea(area: number) {
+  return area.toLocaleString('tr-TR', { maximumFractionDigits: 2 })
+}
+
+function PanelHead({
+  title,
+  icon,
+  to,
+  linkLabel = 'Tümünü gör',
+}: {
+  title: string
+  icon?: ReactNode
+  to?: string
+  linkLabel?: string
+}) {
   return (
     <Stack direction="row" sx={{ justifyContent: 'space-between', alignItems: 'center', mb: 1.5 }}>
       <Stack direction="row" spacing={1} sx={{ alignItems: 'center' }}>
@@ -376,7 +480,7 @@ function PanelHead({ title, icon, to }: { title: string; icon?: ReactNode; to?: 
       </Stack>
       {to && (
         <Link component={RouterLink} to={to} underline="hover" variant="caption" sx={{ fontWeight: 500 }}>
-          Tümünü gör
+          {linkLabel}
         </Link>
       )}
     </Stack>
@@ -389,12 +493,14 @@ function StatTile({
   value,
   sub,
   status,
+  valueColor,
 }: {
   icon: ReactNode
   label: string
   value: string | number
   sub?: string
   status?: 'success' | 'warning' | 'error'
+  valueColor?: string
 }) {
   const theme = useTheme()
   const color = status ? theme.palette[status].main : theme.palette.primary.main
@@ -407,7 +513,7 @@ function StatTile({
           {label}
         </Typography>
       </Stack>
-      <Typography variant="h4" sx={{ fontWeight: 700, color: status ? `${status}.main` : 'text.primary' }}>
+      <Typography variant="h4" sx={{ fontWeight: 700, color: valueColor ?? (status ? `${status}.main` : 'text.primary') }}>
         {value}
       </Typography>
       {sub && (
