@@ -61,3 +61,5 @@ public sealed record CreateOfferRequest(
     decimal? UsdRate,
     string? Status,
     IReadOnlyList<CreateOfferItemRequest> Items);
+
+public sealed record MarkOfferSoldRequest(DateOnly? SoldDate);
