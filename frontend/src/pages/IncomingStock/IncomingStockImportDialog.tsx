@@ -8,6 +8,7 @@ import {
   DialogActions,
   DialogContent,
   DialogTitle,
+  LinearProgress,
   Stack,
   Table,
   TableBody,
@@ -33,7 +34,7 @@ export function IncomingStockImportDialog({ open, onClose }: Props) {
   const [file, setFile] = useState<File | null>(null)
   const [result, setResult] = useState<IncomingStockImportResult | null>(null)
   const [error, setError] = useState<string | null>(null)
-  const [submitting, setSubmitting] = useState(false)
+  const [submitting, setSubmitting] = useState<'preview' | 'import' | null>(null)
   const [templateDownloading, setTemplateDownloading] = useState(false)
 
   const reset = () => {
@@ -44,6 +45,7 @@ export function IncomingStockImportDialog({ open, onClose }: Props) {
   }
 
   const handleClose = () => {
+    if (submitting) return
     reset()
     onClose()
   }
@@ -66,7 +68,7 @@ export function IncomingStockImportDialog({ open, onClose }: Props) {
   const run = async (dryRun: boolean) => {
     if (!file) return
     setError(null)
-    setSubmitting(true)
+    setSubmitting(dryRun ? 'preview' : 'import')
     try {
       const data = await importIncomingStock(file, dryRun)
       setResult(data)
@@ -83,7 +85,7 @@ export function IncomingStockImportDialog({ open, onClose }: Props) {
         'Excel dosyası içe aktarılamadı.'
       setError(message)
     } finally {
-      setSubmitting(false)
+      setSubmitting(null)
     }
   }
 
@@ -110,7 +112,7 @@ export function IncomingStockImportDialog({ open, onClose }: Props) {
             Şablonu İndir
           </Button>
           <Stack direction="row" spacing={1.5} sx={{ alignItems: 'center' }}>
-            <Button variant="outlined" size="small" onClick={() => fileInputRef.current?.click()}>
+            <Button variant="outlined" size="small" disabled={!!submitting} onClick={() => fileInputRef.current?.click()}>
               Dosya Seç
             </Button>
             <Typography variant="body2" color="text.secondary">
@@ -128,11 +130,21 @@ export function IncomingStockImportDialog({ open, onClose }: Props) {
               }}
             />
           </Stack>
+          {submitting && (
+            <Box>
+              <LinearProgress />
+              <Typography variant="body2" color="text.secondary" sx={{ mt: 1 }}>
+                {submitting === 'preview'
+                  ? 'Dosya kontrol ediliyor…'
+                  : `${result?.lotCount ?? ''} parti ve ${result?.plateCount ?? ''} plaka kaydediliyor. Bu işlem birkaç dakika sürebilir, lütfen pencereyi kapatmayın.`}
+              </Typography>
+            </Box>
+          )}
           {error && <Alert severity="error">{error}</Alert>}
-          {result && result.errors.length > 0 && (
+          {!submitting && result && result.errors.length > 0 && (
             <Alert severity="error">{result.errors.length} satır hatalı. Düzeltip tekrar önizleyin; hiçbir kayıt yazılmadı.</Alert>
           )}
-          {result && result.errors.length === 0 && (
+          {!submitting && result && result.errors.length === 0 && (
             <Alert severity={result.saved ? 'success' : 'info'}>
               {result.saved ? 'Aktarıldı: ' : 'Önizleme: '}
               {result.lotCount} parti, {result.plateCount} plaka, {area(result.totalArea)} m²
@@ -164,11 +176,13 @@ export function IncomingStockImportDialog({ open, onClose }: Props) {
         </Stack>
       </DialogContent>
       <DialogActions>
-        <Button onClick={handleClose}>Kapat</Button>
-        <Button disabled={!file || submitting} onClick={() => run(true)}>
+        <Button onClick={handleClose} disabled={!!submitting}>
+          Kapat
+        </Button>
+        <Button disabled={!file || !!submitting} onClick={() => run(true)}>
           Önizle
         </Button>
-        <Button variant="contained" disabled={!previewReady || submitting} onClick={() => run(false)}>
+        <Button variant="contained" disabled={!previewReady || !!submitting} onClick={() => run(false)}>
           Aktar
         </Button>
       </DialogActions>
