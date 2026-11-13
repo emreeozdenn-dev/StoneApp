@@ -455,7 +455,7 @@ export function StonesPage() {
         <DialogContent>
           <Stack spacing={2} sx={{ mt: 1 }}>
             <Typography variant="body2" color="text.secondary">
-              Önce şablonu indirip Taş Adı, Kod, Tip, Menşei, Renk ve Min Stok bilgilerini doldurun,
+              Önce şablonu indirip Taş Adı, Kod, Tip, Menşei, Renk, Min Stok ve Durum (Aktif/Pasif, boşsa Aktif) bilgilerini doldurun,
               ardından dosyayı buradan yükleyin. Kod alanı zorunludur ve mevcut kodlarla
               çakışmamalıdır.
             </Typography>

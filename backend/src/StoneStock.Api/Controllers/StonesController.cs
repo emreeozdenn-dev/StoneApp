@@ -78,7 +78,7 @@ public sealed class StonesController : ControllerBase
         return Ok(new { message = "Taş oluşturuldu.", id = stone.Id });
     }
 
-    private static readonly string[] ImportHeaders = { "Taş Adı", "Kod", "Tip", "Menşei", "Renk", "Min Stok" };
+    private static readonly string[] ImportHeaders = { "Taş Adı", "Kod", "Tip", "Menşei", "Renk", "Min Stok", "Durum" };
 
     [HttpGet("import-template")]
     [Authorize(Policy = PermissionKeys.StonesCreate)]
@@ -114,7 +114,7 @@ public sealed class StonesController : ControllerBase
             return BadRequest(new { message = "Excel dosyası gerekli." });
         }
 
-        var rows = new List<(int Row, string Name, string Code, string Type, string Origin, string Color, decimal MinimumStock)>();
+        var rows = new List<(int Row, string Name, string Code, string Type, string Origin, string Color, decimal MinimumStock, StoneStatus Status)>();
         var errors = new List<StoneImportRowError>();
 
         try
@@ -145,6 +145,7 @@ public sealed class StonesController : ControllerBase
             headerMap.TryGetValue("Menşei", out var originCol);
             headerMap.TryGetValue("Renk", out var colorCol);
             headerMap.TryGetValue("Min Stok", out var minStockCol);
+            headerMap.TryGetValue("Durum", out var statusCol);
 
             var existingCodes = new HashSet<string>(
                 await _db.Stones.Select(s => s.Code).ToListAsync(ct),
@@ -190,7 +191,15 @@ public sealed class StonesController : ControllerBase
                     continue;
                 }
 
-                rows.Add((rowNumber, name, code, type, origin, color, minimumStock));
+                var statusText = statusCol > 0 ? row.Cell(statusCol).GetString().Trim() : string.Empty;
+                var status = StoneStatus.Aktif;
+                if (statusText.Length > 0 && (!Enum.TryParse(statusText, ignoreCase: true, out status) || !Enum.IsDefined(status)))
+                {
+                    errors.Add(new StoneImportRowError(rowNumber, code, "Durum \"Aktif\" veya \"Pasif\" olmalıdır."));
+                    continue;
+                }
+
+                rows.Add((rowNumber, name, code, type, origin, color, minimumStock, status));
             }
         }
         catch (Exception)
@@ -208,7 +217,7 @@ public sealed class StonesController : ControllerBase
                 Origin = r.Origin,
                 Color = r.Color,
                 MinimumStock = r.MinimumStock,
-                Status = StoneStatus.Aktif,
+                Status = r.Status,
                 IsBelowMinimumStock = r.MinimumStock > 0,
             };
             _db.Stones.Add(stone);
@@ -223,7 +232,7 @@ public sealed class StonesController : ControllerBase
         return Ok(new StoneImportResult(rows.Count, errors.Count, errors));
     }
 
-    private static bool TryParseDecimalCell(IXLCell cell, out decimal value)
+    internal static bool TryParseDecimalCell(IXLCell cell, out decimal value)
     {
         value = 0;
         if (cell.IsEmpty())

@@ -87,6 +87,36 @@ export async function importStones(file: File) {
   return data as StoneImportResult
 }
 
+export async function downloadIncomingStockImportTemplate() {
+  const { data } = await apiClient.get('/incoming-stock/import-template', { responseType: 'blob' })
+  return data as Blob
+}
+
+export interface IncomingStockImportRowError {
+  row: number
+  stoneCode: string | null
+  message: string
+}
+
+export interface IncomingStockImportResult {
+  saved: boolean
+  lotCount: number
+  plateCount: number
+  totalArea: number
+  skippedRows: number
+  errors: IncomingStockImportRowError[]
+}
+
+export async function importIncomingStock(file: File, dryRun: boolean) {
+  const formData = new FormData()
+  formData.append('file', file)
+  const { data } = await apiClient.post('/incoming-stock/import', formData, {
+    params: { dryRun },
+    headers: { 'Content-Type': 'multipart/form-data' },
+  })
+  return data as IncomingStockImportResult
+}
+
 export interface IncomingStock {
   id: number
   stoneId: number
