@@ -93,8 +93,8 @@ export async function deleteOffer(id: number) {
   return data as { message: string }
 }
 
-export async function markOfferSold(id: number) {
-  const { data } = await apiClient.post(`/offers/${id}/mark-sold`)
+export async function markOfferSold({ id, soldDate }: { id: number; soldDate: string }) {
+  const { data } = await apiClient.post(`/offers/${id}/mark-sold`, { soldDate })
   return data as { message: string }
 }
 

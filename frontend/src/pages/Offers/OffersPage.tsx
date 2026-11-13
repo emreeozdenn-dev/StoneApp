@@ -15,6 +15,7 @@ import {
   TableCell,
   TableHead,
   TableRow,
+  TextField,
   Typography,
 } from '@mui/material'
 import { deleteOffer, fetchOffers, markOfferSold, OFFER_STATUS_LABELS, type Offer } from '../../api/offers'
@@ -32,6 +33,7 @@ type OfferColumnKey =
   | 'currency'
   | 'totalAmount'
   | 'status'
+  | 'soldAt'
   | 'createdByUserName'
   | 'createdAt'
 
@@ -41,9 +43,16 @@ const OFFER_COLUMNS: ColumnDef<OfferColumnKey>[] = [
   { key: 'currency', label: 'Para Birimi' },
   { key: 'totalAmount', label: 'Genel Toplam', align: 'right' },
   { key: 'status', label: 'Durum' },
+  { key: 'soldAt', label: 'Satış Tarihi' },
   { key: 'createdByUserName', label: 'Oluşturan' },
   { key: 'createdAt', label: 'Oluşturma Tarihi' },
 ]
+
+// Tarayıcının yerel saatine göre bugünün tarihi (YYYY-MM-DD)
+function todayIso() {
+  const d = new Date()
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
+}
 
 export function OffersPage() {
   const { user } = useCurrentUser()
@@ -79,6 +88,7 @@ export function OffersPage() {
 
   const [soldTarget, setSoldTarget] = useState<Offer | null>(null)
   const [soldError, setSoldError] = useState<string | null>(null)
+  const [soldDate, setSoldDate] = useState(todayIso)
   const markSoldMutation = useMutation({
     mutationFn: markOfferSold,
     onSuccess: () => {
@@ -123,6 +133,8 @@ export function OffersPage() {
             label={OFFER_STATUS_LABELS[o.status]}
           />
         )
+      case 'soldAt':
+        return o.soldAt ? new Date(o.soldAt).toLocaleDateString('tr-TR') : '—'
       case 'createdByUserName':
         return o.createdByUserName
       case 'createdAt':
@@ -194,6 +206,7 @@ export function OffersPage() {
                           onClick={() => {
                             setSoldTarget(o)
                             setSoldError(null)
+                            setSoldDate(todayIso())
                           }}
                         >
                           Satıldı
@@ -289,6 +302,18 @@ export function OffersPage() {
             işaretlenecek ve satış tutarları teklif kalemlerindeki fiyatlara göre plakalara işlenecek. Bu işlem
             geri alınamaz.
           </Typography>
+          <TextField
+            id="offer-sold-date"
+            label="Satış Tarihi"
+            type="date"
+            fullWidth
+            required
+            value={soldDate}
+            onChange={(e) => setSoldDate(e.target.value)}
+            slotProps={{ inputLabel: { shrink: true }, htmlInput: { max: todayIso() } }}
+            error={!soldDate || soldDate > todayIso()}
+            helperText={soldDate > todayIso() ? 'İleri bir tarih seçilemez.' : undefined}
+          />
           {soldError && (
             <Alert severity="error" sx={{ mt: 2 }}>
               {soldError}
@@ -300,8 +325,8 @@ export function OffersPage() {
           <Button
             variant="contained"
             color="success"
-            disabled={markSoldMutation.isPending}
-            onClick={() => soldTarget && markSoldMutation.mutate(soldTarget.id)}
+            disabled={markSoldMutation.isPending || !soldDate || soldDate > todayIso()}
+            onClick={() => soldTarget && markSoldMutation.mutate({ id: soldTarget.id, soldDate })}
           >
             {markSoldMutation.isPending ? 'İşleniyor…' : 'Satıldı Olarak İşaretle'}
           </Button>

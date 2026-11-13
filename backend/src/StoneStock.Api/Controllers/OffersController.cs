@@ -210,8 +210,22 @@ public sealed class OffersController : ControllerBase
 
     [HttpPost("{id:int}/mark-sold")]
     [Authorize(Policy = PermissionKeys.OffersCreate)]
-    public async Task<IActionResult> MarkSold(int id, CancellationToken ct)
+    public async Task<IActionResult> MarkSold(int id, [FromBody] MarkOfferSoldRequest? request, CancellationToken ct)
     {
+        // Türkiye saati (UTC+3) ile bugünün tarihi; ileri tarihli satış girilemez.
+        var turkeyOffset = TimeSpan.FromHours(3);
+        var todayInTurkey = DateOnly.FromDateTime(DateTimeOffset.UtcNow.ToOffset(turkeyOffset).DateTime);
+        var soldDate = request?.SoldDate ?? todayInTurkey;
+        if (soldDate > todayInTurkey)
+        {
+            return BadRequest(new { message = "Satış tarihi bugünden ileri bir tarih olamaz." });
+        }
+
+        // Bugün seçildiyse gerçek saat, geçmiş bir gün seçildiyse o günün öğlen saati kaydedilir.
+        var soldAt = soldDate == todayInTurkey
+            ? DateTimeOffset.UtcNow
+            : new DateTimeOffset(soldDate.ToDateTime(new TimeOnly(12, 0)), turkeyOffset).ToUniversalTime();
+
         var offer = await _db.Offers.Include(o => o.Items).FirstOrDefaultAsync(o => o.Id == id, ct);
         if (offer is null)
         {
@@ -248,7 +262,7 @@ public sealed class OffersController : ControllerBase
                 plate.Status = PlateStatus.Satildi;
                 plate.SaleAmount = perPlateAmount;
                 plate.SaleAmountCurrency = offer.Currency;
-                plate.SoldAt = DateTimeOffset.UtcNow;
+                plate.SoldAt = soldAt;
                 plate.SoldByUserId = userId;
                 affectedStones[plate.Stone.Id] = plate.Stone;
                 soldPlateIds.Add(plate.Id);
@@ -265,7 +279,7 @@ public sealed class OffersController : ControllerBase
         }
 
         offer.IsSold = true;
-        offer.SoldAt = DateTimeOffset.UtcNow;
+        offer.SoldAt = soldAt;
 
         AuditLogWriter.Log(_db, User, "Sold", "Offer", offer.CompanyName, $"{offer.CompanyName} — {soldPlateIds.Count} plaka satıldı olarak işaretlendi.");
         await _db.SaveChangesAsync(ct);
