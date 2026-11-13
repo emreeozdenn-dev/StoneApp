@@ -152,6 +152,12 @@ namespace StoneStock.Infrastructure.Persistence.Migrations
                     b.Property<DateOnly>("ArrivalDate")
                         .HasColumnType("date");
 
+                    b.Property<decimal?>("ArrivalExchangeRate")
+                        .HasColumnType("numeric");
+
+                    b.Property<bool>("ArrivalExchangeRateManual")
+                        .HasColumnType("boolean");
+
                     b.Property<string>("BatchCode")
                         .IsRequired()
                         .HasColumnType("text");

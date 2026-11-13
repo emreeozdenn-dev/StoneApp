@@ -86,6 +86,7 @@ builder.Services.AddScoped<IExchangeRateService>(sp =>
         sp.GetRequiredService<IHttpClientFactory>().CreateClient(),
         sp.GetRequiredService<Microsoft.Extensions.Caching.Memory.IMemoryCache>(),
         sp.GetRequiredService<ILogger<TcmbExchangeRateService>>()));
+builder.Services.AddHostedService<StoneStock.Api.Background.ArrivalExchangeRateBackfillService>();
 
 builder.Services
     .AddAuthentication(CookieAuth.SchemeName)
