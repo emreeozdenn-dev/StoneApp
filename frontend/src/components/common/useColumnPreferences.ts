@@ -4,6 +4,8 @@ export interface ColumnDef<Key extends string> {
   key: Key
   label: string
   align?: 'left' | 'right' | 'center'
+  /** Başlığın üzerine gelince gösterilen açıklama (kısaltılmış başlıklar için). */
+  title?: string
 }
 
 export interface ColumnPreferencesOptions<Key extends string> {

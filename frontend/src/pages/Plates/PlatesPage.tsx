@@ -21,12 +21,19 @@ import {
   TableBody,
   TableCell,
   TableHead,
+  TablePagination,
   TableRow,
   TextField,
   Typography,
 } from '@mui/material'
 import SearchIcon from '@mui/icons-material/SearchOutlined'
 import WhatsAppIcon from '@mui/icons-material/WhatsApp'
+import EditIcon from '@mui/icons-material/EditOutlined'
+import BookmarkAddIcon from '@mui/icons-material/BookmarkAddOutlined'
+import BookmarkRemoveIcon from '@mui/icons-material/BookmarkRemoveOutlined'
+import SellIcon from '@mui/icons-material/SellOutlined'
+import ReceiptIcon from '@mui/icons-material/ReceiptLongOutlined'
+import DeleteIcon from '@mui/icons-material/DeleteOutlined'
 import {
   CURRENCIES,
   createPlate,
@@ -138,6 +145,8 @@ const supplyTypeColor: Record<string, 'primary' | 'info' | 'success' | 'warning'
   Diger: 'secondary',
 }
 
+const PLATES_PER_PAGE = 30
+
 export function PlatesPage() {
   const { user } = useCurrentUser()
   const queryClient = useQueryClient()
@@ -164,9 +173,7 @@ export function PlatesPage() {
 
   const [saleInfoPlate, setSaleInfoPlate] = useState<Plate | null>(null)
 
-  const [imageDialogPlate, setImageDialogPlate] = useState<Plate | null>(null)
-  const [imageDialogFile, setImageDialogFile] = useState<File | null>(null)
-  const imageDialogInputRef = useRef<HTMLInputElement>(null)
+  const [editImage, setEditImage] = useState<File | null>(null)
 
   const [editingPlate, setEditingPlate] = useState<Plate | null>(null)
   const [editForm, setEditForm] = useState<{
@@ -200,8 +207,18 @@ export function PlatesPage() {
     if (canSeeCost) cols.push({ key: 'unitCost', label: 'Birim Maliyet', align: 'right' })
     cols.push({ key: 'saleCost', label: 'Satış Maliyeti', align: 'right' })
     if (canSeeCost) {
-      cols.push({ key: 'saleCostLive', label: 'Satış Maliyeti (Güncel Kura Göre)', align: 'right' })
-      cols.push({ key: 'saleCostArrival', label: 'Satış Maliyeti (Geliş Kuruna Göre)', align: 'right' })
+      cols.push({
+        key: 'saleCostLive',
+        label: 'Satış Maliyeti (Güncel Kur)',
+        title: 'Satış Maliyeti (Güncel Kura Göre)',
+        align: 'right',
+      })
+      cols.push({
+        key: 'saleCostArrival',
+        label: 'Satış Maliyeti (Geliş Kuru)',
+        title: 'Satış Maliyeti (Geliş Kuruna Göre)',
+        align: 'right',
+      })
     }
     cols.push({ key: 'status', label: 'Durum' })
     cols.push({ key: 'supplyType', label: 'Tedarik Türü' })
@@ -211,7 +228,11 @@ export function PlatesPage() {
     return cols
   }, [canSeeCost])
 
-  const columnPrefs = useColumnPreferences('plates', plateColumns, { defaultHidden: ['saleAmount'] })
+  // Varsayılan görünüm ekrana sığacak sütunlarla gelir; diğerleri sütun ayarlarından açılabilir.
+  // Anahtar "v2" yapıldı ki tüm sütunları açık kaydedilmiş eski tercihler bu yeni varsayılana dönsün.
+  const columnPrefs = useColumnPreferences('plates.v2', plateColumns, {
+    defaultHidden: ['saleAmount', 'saleCostArrival', 'supplyType', 'barcode', 'qr'],
+  })
   const draggableColumns = useDraggableColumns(columnPrefs.reorderTo)
 
   function renderPlateCell(key: PlateColumnKey, p: Plate) {
@@ -297,6 +318,22 @@ export function PlatesPage() {
     })
   }, [platesQuery.data, search, statusFilter])
 
+  // Tüm plakalar tek seferde çizilmesin diye tablo sayfalanır; arama ve filtre yine tüm plakalarda çalışır.
+  const tableScrollRef = useRef<HTMLDivElement>(null)
+  const rowsPerPage = PLATES_PER_PAGE
+  const [page, setPage] = useState(0)
+  const lastPage = Math.max(0, Math.ceil(filteredPlates.length / rowsPerPage) - 1)
+  const currentPage = Math.min(page, lastPage)
+  const pagedPlates = useMemo(
+    () => filteredPlates.slice(currentPage * rowsPerPage, (currentPage + 1) * rowsPerPage),
+    [filteredPlates, currentPage, rowsPerPage],
+  )
+
+  function goToPage(next: number) {
+    setPage(next)
+    tableScrollRef.current?.scrollTo({ top: 0 })
+  }
+
   const plateStats = useMemo(() => {
     const all = platesQuery.data ?? []
     const now = new Date()
@@ -313,8 +350,8 @@ export function PlatesPage() {
   }, [platesQuery.data])
 
   const [selectedIds, setSelectedIds] = useState<Set<number>>(new Set())
-  const allVisibleSelected = filteredPlates.length > 0 && filteredPlates.every((p) => selectedIds.has(p.id))
-  const someVisibleSelected = !allVisibleSelected && filteredPlates.some((p) => selectedIds.has(p.id))
+  const allVisibleSelected = pagedPlates.length > 0 && pagedPlates.every((p) => selectedIds.has(p.id))
+  const someVisibleSelected = !allVisibleSelected && pagedPlates.some((p) => selectedIds.has(p.id))
   const selectedPlates = useMemo(
     () => (platesQuery.data ?? []).filter((p) => selectedIds.has(p.id)),
     [platesQuery.data, selectedIds],
@@ -333,9 +370,9 @@ export function PlatesPage() {
     setSelectedIds((prev) => {
       const next = new Set(prev)
       if (allVisibleSelected) {
-        filteredPlates.forEach((p) => next.delete(p.id))
+        pagedPlates.forEach((p) => next.delete(p.id))
       } else {
-        filteredPlates.forEach((p) => next.add(p.id))
+        pagedPlates.forEach((p) => next.add(p.id))
       }
       return next
     })
@@ -786,6 +823,7 @@ export function PlatesPage() {
       height: String(metersToCm(plate.height)),
       warehouse: plate.warehouse,
     })
+    setEditImage(null)
     setEditError(null)
   }
 
@@ -800,6 +838,9 @@ export function PlatesPage() {
     setEditSubmitting(true)
     try {
       await updateMutation.mutateAsync({ id: editingPlate.id, payload: editForm })
+      if (editImage) {
+        await uploadImageMutation.mutateAsync({ id: editingPlate.id, file: editImage })
+      }
       invalidateAll()
       setEditingPlate(null)
       setEditForm(null)
@@ -811,14 +852,6 @@ export function PlatesPage() {
     } finally {
       setEditSubmitting(false)
     }
-  }
-
-  const handleImageDialogSave = async () => {
-    if (!imageDialogPlate || !imageDialogFile) return
-    await uploadImageMutation.mutateAsync({ id: imageDialogPlate.id, file: imageDialogFile })
-    invalidateAll()
-    setImageDialogPlate(null)
-    setImageDialogFile(null)
   }
 
   const batchesForStone =
@@ -858,19 +891,22 @@ export function PlatesPage() {
         )}
       </Stack>
 
-      <Stack direction="row" sx={{ flexWrap: 'wrap', gap: 1.75, mb: 3 }}>
-        <StatTile label="Toplam Plaka" value={plateStats.total} />
-        <StatTile label="Aktif Alan" value={`${plateStats.activeArea.toLocaleString('tr-TR')} m²`} />
-        <StatTile label="Rezerve" value={plateStats.reserved} />
-        <StatTile label="Bu Ay Satılan" value={plateStats.soldThisMonth} />
+      <Stack direction="row" sx={{ flexWrap: 'wrap', gap: 1.25, mb: 2 }}>
+        <StatTile dense label="Toplam Plaka" value={plateStats.total} />
+        <StatTile dense label="Aktif Alan" value={`${plateStats.activeArea.toLocaleString('tr-TR')} m²`} />
+        <StatTile dense label="Rezerve" value={plateStats.reserved} />
+        <StatTile dense label="Bu Ay Satılan" value={plateStats.soldThisMonth} />
       </Stack>
 
-      <Stack direction="row" spacing={2} sx={{ mb: 2, alignItems: 'center', flexWrap: 'wrap' }}>
+      <Stack direction="row" spacing={2} useFlexGap sx={{ mb: 2, alignItems: 'center', flexWrap: 'wrap' }}>
         <TextField
           size="small"
           placeholder="Plaka no, taş, parti kodu veya depo ara…"
           value={search}
-          onChange={(e) => setSearch(e.target.value)}
+          onChange={(e) => {
+            setSearch(e.target.value)
+            goToPage(0)
+          }}
           sx={{ minWidth: 280 }}
           slotProps={{
             input: {
@@ -887,7 +923,10 @@ export function PlatesPage() {
           size="small"
           label="Durum"
           value={statusFilter}
-          onChange={(e) => setStatusFilter(e.target.value as 'Tumu' | Plate['status'])}
+          onChange={(e) => {
+            setStatusFilter(e.target.value as 'Tumu' | Plate['status'])
+            goToPage(0)
+          }}
           sx={{ minWidth: 160 }}
         >
           <MenuItem value="Tumu">Tümü</MenuItem>
@@ -907,11 +946,43 @@ export function PlatesPage() {
             </Button>
           </>
         )}
+        <TablePagination
+          component="div"
+          sx={{
+            ml: 'auto',
+            flexShrink: 0,
+            '& .MuiTablePagination-toolbar': { minHeight: 40, pl: 0, pr: 0 },
+            '& .MuiTablePagination-actions': { ml: 1 },
+          }}
+          count={filteredPlates.length}
+          page={currentPage}
+          onPageChange={(_, next) => goToPage(next)}
+          rowsPerPage={rowsPerPage}
+          rowsPerPageOptions={[]}
+          labelDisplayedRows={({ from, to, count }) => `${from}–${to} / ${count} plaka`}
+          showFirstButton
+          showLastButton
+        />
       </Stack>
 
-      <Box sx={{ overflowX: 'auto' }}>
-        <Table sx={{ minWidth: 1080 }}>
-          <TableHead>
+      {/* Tablo kendi alanında kayar: yatay kaydırma çubuğu ekranın altında görünür kalır, başlık üstte sabitlenir. */}
+      <Box
+        ref={tableScrollRef}
+        sx={{ overflow: 'auto', maxHeight: 'calc(100vh - 240px)', minHeight: 360, border: 1, borderColor: 'divider', borderRadius: 1 }}
+      >
+        <Table stickyHeader size="small" sx={{ minWidth: 1080 }}>
+          <TableHead
+            sx={{
+              '& .MuiTableCell-head': {
+                fontSize: 13,
+                fontWeight: 600,
+                lineHeight: 1.3,
+                whiteSpace: 'nowrap',
+                color: 'text.secondary',
+                py: 1.25,
+              },
+            }}
+          >
             <TableRow>
               <TableCell padding="checkbox">
                 <Checkbox
@@ -923,7 +994,12 @@ export function PlatesPage() {
               {columnPrefs.visibleOrderedKeys.map((key) => {
                 const col = plateColumns.find((c) => c.key === key)
                 return (
-                  <TableCell key={key} align={col?.align} {...draggableColumns.getHeaderCellProps(key)}>
+                  <TableCell
+                    key={key}
+                    align={col?.align}
+                    title={col?.title}
+                    {...draggableColumns.getHeaderCellProps(key)}
+                  >
                     {col?.label}
                   </TableCell>
                 )
@@ -932,7 +1008,7 @@ export function PlatesPage() {
             </TableRow>
           </TableHead>
           <TableBody>
-            {filteredPlates.map((p) => (
+            {pagedPlates.map((p) => (
               <TableRow key={p.id} selected={selectedIds.has(p.id)}>
                 <TableCell padding="checkbox">
                   <Checkbox checked={selectedIds.has(p.id)} onChange={() => toggleSelected(p.id)} />
@@ -946,76 +1022,56 @@ export function PlatesPage() {
                   )
                 })}
                 {(canEdit || canDelete) && (
-                  <TableCell>
-                    <Stack direction="row" spacing={1}>
+                  <TableCell sx={{ py: 0.5 }}>
+                    <Stack direction="row" spacing={0.25} sx={{ alignItems: 'center' }}>
                       {canEdit && (
                         <>
-                          <Button size="small" onClick={() => openEdit(p)}>
-                            Düzenle
-                          </Button>
-                          <Button
-                            size="small"
-                            onClick={() => {
-                              setImageDialogPlate(p)
-                              setImageDialogFile(null)
-                            }}
-                          >
-                            Görsel
-                          </Button>
+                          <RowAction label="Düzenle" icon={<EditIcon fontSize="small" />} onClick={() => openEdit(p)} />
                           {p.status === 'Satildi' && (
-                            <Button size="small" onClick={() => setSaleInfoPlate(p)}>
-                              Satış Bilgilerini Göster
-                            </Button>
+                            <RowAction
+                              label="Satış Bilgisi"
+                              icon={<ReceiptIcon fontSize="small" />}
+                              onClick={() => setSaleInfoPlate(p)}
+                            />
                           )}
                           {p.status === 'Aktif' && (
-                            <>
-                              <Button size="small" onClick={() => reserveMutation.mutate(p.id)}>
-                                Rezerve Et
-                              </Button>
-                              <Button
-                                size="small"
-                                variant="contained"
-                                onClick={() => {
-                                  setSaleDialogPlate(p)
-                                  setSaleAmount('')
-                                  setSaleCurrency(p.saleCurrency)
-                                }}
-                              >
-                                Satıldı
-                              </Button>
-                            </>
+                            <RowAction
+                              label="Rezerve"
+                              icon={<BookmarkAddIcon fontSize="small" />}
+                              onClick={() => reserveMutation.mutate(p.id)}
+                            />
                           )}
                           {p.status === 'Rezerve' && (
-                            <>
-                              <Button size="small" onClick={() => unreserveMutation.mutate(p.id)}>
-                                Rezerveden Çıkar
-                              </Button>
-                              <Button
-                                size="small"
-                                variant="contained"
-                                onClick={() => {
-                                  setSaleDialogPlate(p)
-                                  setSaleAmount('')
-                                  setSaleCurrency(p.saleCurrency)
-                                }}
-                              >
-                                Satıldı
-                              </Button>
-                            </>
+                            <RowAction
+                              label="Rezerveden Çıkar"
+                              icon={<BookmarkRemoveIcon fontSize="small" />}
+                              onClick={() => unreserveMutation.mutate(p.id)}
+                            />
+                          )}
+                          {(p.status === 'Aktif' || p.status === 'Rezerve') && (
+                            <RowAction
+                              label="Satıldı"
+                              color="success"
+                              icon={<SellIcon fontSize="small" />}
+                              onClick={() => {
+                                setSaleDialogPlate(p)
+                                setSaleAmount('')
+                                setSaleCurrency(p.saleCurrency)
+                              }}
+                            />
                           )}
                         </>
                       )}
                       {canDelete && p.status !== 'Satildi' && (
-                        <Button
-                          size="small"
+                        <RowAction
+                          label="Sil"
                           color="error"
+                          icon={<DeleteIcon fontSize="small" />}
                           onClick={() => {
                             setDeleteTarget(p)
                             setDeleteError(null)
                           }}
-                        >
-                          Sil
-                        </Button>
+                        />
                       )}
                     </Stack>
                   </TableCell>
@@ -1331,82 +1387,89 @@ export function PlatesPage() {
         </DialogActions>
       </Dialog>
 
-      <Dialog open={!!editingPlate} onClose={() => setEditingPlate(null)} maxWidth="sm" fullWidth>
+      <Dialog open={!!editingPlate} onClose={() => setEditingPlate(null)} maxWidth="md" fullWidth>
         <DialogTitle>Plakayı Düzenle</DialogTitle>
         <DialogContent>
           {editForm && (
-            <Stack sx={{ mt: 0.5 }}>
-              <GroupLabel>Kaynak</GroupLabel>
-              <Grid container spacing={2} sx={{ mb: 2.5 }}>
-                <Grid size={{ xs: 12, sm: 6 }}>
-                  <TextField label="Taş" value={editingPlate?.stoneName ?? ''} fullWidth disabled />
-                </Grid>
-                <Grid size={{ xs: 12, sm: 6 }}>
-                  <TextField label="Parti/Lot Kodu" value={editingPlate?.batchCode ?? ''} fullWidth disabled />
-                </Grid>
-                <Grid size={{ xs: 12, sm: editBatch && editBatch.bundleCount > 0 ? 6 : 12 }}>
-                  <TextField label="Plaka No" value={editForm.plateNo} onChange={handleEditChange('plateNo')} fullWidth />
-                </Grid>
-                {editBatch && editBatch.bundleCount > 0 && (
-                  <Grid size={{ xs: 12, sm: 6 }}>
-                    <TextField
-                      select
-                      label="Bundle Seçimi"
-                      value={editForm.bundleNumber}
-                      onChange={handleEditChange('bundleNumber')}
-                      fullWidth
-                      required
-                    >
-                      {editBundleLabels.map((label, index) => (
-                        <MenuItem key={index + 1} value={index + 1}>
-                          {label}
-                        </MenuItem>
-                      ))}
-                    </TextField>
+            <Grid container spacing={3} sx={{ mt: 0.5 }}>
+              <Grid size={{ xs: 12, sm: 'auto' }} sx={{ display: 'flex', justifyContent: { xs: 'center', sm: 'flex-start' } }}>
+                <ImageDropzone file={editImage} existingUrl={editingPlate?.imageUrl} onChange={setEditImage} />
+              </Grid>
+              <Grid size={{ xs: 12, sm: 'grow' }}>
+                <Stack>
+                  <GroupLabel>Kaynak</GroupLabel>
+                  <Grid container spacing={2} sx={{ mb: 2.5 }}>
+                    <Grid size={{ xs: 12, sm: 6 }}>
+                      <TextField label="Taş" value={editingPlate?.stoneName ?? ''} fullWidth disabled />
+                    </Grid>
+                    <Grid size={{ xs: 12, sm: 6 }}>
+                      <TextField label="Parti/Lot Kodu" value={editingPlate?.batchCode ?? ''} fullWidth disabled />
+                    </Grid>
+                    <Grid size={{ xs: 12, sm: editBatch && editBatch.bundleCount > 0 ? 6 : 12 }}>
+                      <TextField label="Plaka No" value={editForm.plateNo} onChange={handleEditChange('plateNo')} fullWidth />
+                    </Grid>
+                    {editBatch && editBatch.bundleCount > 0 && (
+                      <Grid size={{ xs: 12, sm: 6 }}>
+                        <TextField
+                          select
+                          label="Bundle Seçimi"
+                          value={editForm.bundleNumber}
+                          onChange={handleEditChange('bundleNumber')}
+                          fullWidth
+                          required
+                        >
+                          {editBundleLabels.map((label, index) => (
+                            <MenuItem key={index + 1} value={index + 1}>
+                              {label}
+                            </MenuItem>
+                          ))}
+                        </TextField>
+                      </Grid>
+                    )}
+                    <Grid size={12}>
+                      <WarehouseField
+                        value={editForm.warehouse}
+                        onChange={(value) => setEditForm((prev) => (prev ? { ...prev, warehouse: value } : prev))}
+                      />
+                    </Grid>
                   </Grid>
-                )}
-                <Grid size={12}>
-                  <WarehouseField
-                    value={editForm.warehouse}
-                    onChange={(value) => setEditForm((prev) => (prev ? { ...prev, warehouse: value } : prev))}
-                  />
-                </Grid>
-              </Grid>
 
-              <GroupLabel>Ölçüler</GroupLabel>
-              <Grid container spacing={2}>
-                <Grid size={{ xs: 12, sm: 6 }}>
-                  <TextField
-                    label="Doku"
-                    value={editingPlate?.texture ?? ''}
-                    helperText="Partiden otomatik gelir."
-                    fullWidth
-                    disabled
-                  />
-                </Grid>
-                <Grid size={{ xs: 12, sm: 6 }}>
-                  <TextField
-                    label="Kalınlık (cm)"
-                    value={editingPlate?.thickness ?? ''}
-                    helperText="Partiden otomatik gelir."
-                    fullWidth
-                    disabled
-                  />
-                </Grid>
-                <Grid size={{ xs: 12, sm: 6 }}>
-                  <TextField label="En (cm)" value={editForm.width} onChange={handleEditChange('width')} fullWidth />
-                </Grid>
-                <Grid size={{ xs: 12, sm: 6 }}>
-                  <TextField label="Boy (cm)" value={editForm.height} onChange={handleEditChange('height')} fullWidth />
-                </Grid>
-              </Grid>
+                  <GroupLabel>Ölçüler</GroupLabel>
+                  <Grid container spacing={2}>
+                    <Grid size={{ xs: 12, sm: 6 }}>
+                      <TextField
+                        label="Doku"
+                        value={editingPlate?.texture ?? ''}
+                        helperText="Partiden otomatik gelir."
+                        fullWidth
+                        disabled
+                      />
+                    </Grid>
+                    <Grid size={{ xs: 12, sm: 6 }}>
+                      <TextField
+                        label="Kalınlık (cm)"
+                        value={editingPlate?.thickness ?? ''}
+                        helperText="Partiden otomatik gelir."
+                        fullWidth
+                        disabled
+                      />
+                    </Grid>
+                    <Grid size={{ xs: 12, sm: 6 }}>
+                      <TextField label="En (cm)" value={editForm.width} onChange={handleEditChange('width')} fullWidth />
+                    </Grid>
+                    <Grid size={{ xs: 12, sm: 6 }}>
+                      <TextField label="Boy (cm)" value={editForm.height} onChange={handleEditChange('height')} fullWidth />
+                    </Grid>
+                  </Grid>
 
-              {editError && (
-                <Alert severity="error" sx={{ mt: 2.5 }}>
-                  {editError}
-                </Alert>
-              )}
-            </Stack>
+                  {editError && (
+                    <Alert severity="error" sx={{ mt: 2.5 }}>
+                      {editError}
+                    </Alert>
+                  )}
+                </Stack>
+              </Grid>
+            </Grid>
           )}
         </DialogContent>
         <DialogActions>
@@ -1515,42 +1578,6 @@ export function PlatesPage() {
         </DialogContent>
         <DialogActions>
           <Button onClick={() => setSaleInfoPlate(null)}>Kapat</Button>
-        </DialogActions>
-      </Dialog>
-
-      <Dialog open={!!imageDialogPlate} onClose={() => setImageDialogPlate(null)} maxWidth="sm" fullWidth>
-        <DialogTitle>Plaka Görseli</DialogTitle>
-        <DialogContent>
-          <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
-            {imageDialogPlate?.plateNo}
-          </Typography>
-          <Stack direction="row" spacing={1.5} sx={{ alignItems: 'center' }}>
-            <ImageThumbnail
-              src={imageDialogFile ? URL.createObjectURL(imageDialogFile) : imageDialogPlate?.imageUrl}
-              alt="Önizleme"
-              size={72}
-            />
-            <Button variant="outlined" size="small" onClick={() => imageDialogInputRef.current?.click()}>
-              Görsel Seç
-            </Button>
-            <input
-              ref={imageDialogInputRef}
-              type="file"
-              accept="image/jpeg,image/png,image/webp"
-              hidden
-              onChange={(e) => setImageDialogFile(e.target.files?.[0] ?? null)}
-            />
-          </Stack>
-        </DialogContent>
-        <DialogActions>
-          <Button onClick={() => setImageDialogPlate(null)}>Vazgeç</Button>
-          <Button
-            variant="contained"
-            disabled={!imageDialogFile || uploadImageMutation.isPending}
-            onClick={handleImageDialogSave}
-          >
-            Kaydet
-          </Button>
         </DialogActions>
       </Dialog>
 
@@ -1983,5 +2010,41 @@ export function PlatesPage() {
         </DialogActions>
       </Dialog>
     </Box>
+  )
+}
+
+/** Tablo satırındaki işlem düğmesi: simge üstte, kısa açıklama altında. */
+function RowAction({
+  label,
+  icon,
+  onClick,
+  color = 'primary',
+}: {
+  label: string
+  icon: React.ReactNode
+  onClick: () => void
+  color?: 'primary' | 'success' | 'error'
+}) {
+  return (
+    <Button
+      size="small"
+      color={color}
+      onClick={onClick}
+      sx={{
+        minWidth: 0,
+        px: 0.75,
+        py: 0.25,
+        flexDirection: 'column',
+        gap: 0.25,
+        lineHeight: 1.1,
+        fontSize: 11,
+        fontWeight: 500,
+        textTransform: 'none',
+        whiteSpace: 'nowrap',
+      }}
+    >
+      {icon}
+      {label}
+    </Button>
   )
 }
