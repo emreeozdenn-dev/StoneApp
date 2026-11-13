@@ -115,6 +115,8 @@ public sealed class IncomingStockController : ControllerBase
             PlateCountAdded = 0,
             TotalArea = 0,
         };
+        await ArrivalExchangeRates.ApplyAsync(
+            incomingStock, HasCostPermission() ? request.ArrivalExchangeRate : null, _exchangeRateService, ct);
         _db.IncomingStocks.Add(incomingStock);
         await TexturesController.EnsureExistsAsync(_db, request.Texture, ct);
         await WarehousesController.EnsureExistsAsync(_db, request.Warehouse, ct);
@@ -369,6 +371,7 @@ public sealed class IncomingStockController : ControllerBase
                 Description = descriptions.Count > 0 ? string.Join(" / ", descriptions) : null,
                 CreatedByUserId = userId,
             };
+            await ArrivalExchangeRates.ApplyAsync(incomingStock, null, _exchangeRateService, ct);
 
             var sequence = plateSequences.GetValueOrDefault(stone.Id, 1);
             foreach (var line in lot)
@@ -497,6 +500,17 @@ public sealed class IncomingStockController : ControllerBase
             incomingStock.OtherCost = request.OtherCost;
         }
 
+        // Geliş tarihi veya para birimi değişmiş olabilir; kur yeniden belirlenir. Maliyet yetkisi olmayan kullanıcı
+        // elle girilmiş kuru değiştiremez, yalnızca TCMB'den doldurulmuş kur güncellenir.
+        if (HasCostPermission())
+        {
+            await ArrivalExchangeRates.ApplyAsync(incomingStock, request.ArrivalExchangeRate, _exchangeRateService, ct);
+        }
+        else if (!incomingStock.ArrivalExchangeRateManual)
+        {
+            await ArrivalExchangeRates.ApplyAsync(incomingStock, null, _exchangeRateService, ct);
+        }
+
         await TexturesController.EnsureExistsAsync(_db, request.Texture, ct);
         await WarehousesController.EnsureExistsAsync(_db, request.Warehouse, ct);
         AuditLogWriter.Log(_db, User, "Updated", "IncomingStock", incomingStock.BatchCode, incomingStock.BatchCode);
@@ -583,7 +597,8 @@ public sealed class IncomingStockController : ControllerBase
                 saleCost, i.Description,
                 $"{i.CreatedByUser.FirstName} {i.CreatedByUser.LastName}", i.PlateCountAdded, i.TotalArea,
                 i.CreatedAt, i.UnitCost, i.CostCurrency.ToString(),
-                i.CustomsCost, i.ShippingCost, i.OtherCost, i.CustomsCost + i.ShippingCost + i.OtherCost);
+                i.CustomsCost, i.ShippingCost, i.OtherCost, i.CustomsCost + i.ShippingCost + i.OtherCost,
+                i.ArrivalExchangeRate, i.ArrivalExchangeRateManual);
         }
 
         return new IncomingStockDto(

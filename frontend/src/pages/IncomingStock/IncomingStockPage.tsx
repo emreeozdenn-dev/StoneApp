@@ -380,6 +380,7 @@ export function IncomingStockPage() {
         customsCost: Number(payload.customsCost) || 0,
         shippingCost: Number(payload.shippingCost) || 0,
         otherCost: Number(payload.otherCost) || 0,
+        arrivalExchangeRate: editRateOverrideEnabled ? Number(editRateOverride) || null : null,
       }),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['incoming-stock'] })
@@ -452,8 +453,9 @@ export function IncomingStockPage() {
       shippingCost: String(row.shippingCost ?? 0),
       otherCost: String(row.otherCost ?? 0),
     })
-    setEditRateOverrideEnabled(false)
-    setEditRateOverride('')
+    // Elle girilmiş kur partiye kayıtlıdır; düzenlemede o değerle açılır.
+    setEditRateOverrideEnabled(!!row.arrivalExchangeRateManual)
+    setEditRateOverride(row.arrivalExchangeRateManual && row.arrivalExchangeRate != null ? String(row.arrivalExchangeRate) : '')
     setEditError(null)
   }
 
@@ -508,6 +510,7 @@ export function IncomingStockPage() {
       customsCost: canSeeCost ? Number(form.customsCost) || 0 : 0,
       shippingCost: canSeeCost ? Number(form.shippingCost) || 0 : 0,
       otherCost: canSeeCost ? Number(form.otherCost) || 0 : 0,
+      arrivalExchangeRate: canSeeCost && createRateOverrideEnabled ? Number(createRateOverride) || null : null,
     })
   }
 

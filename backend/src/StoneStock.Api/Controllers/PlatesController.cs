@@ -55,8 +55,17 @@ public sealed class PlatesController : ControllerBase
             .ToListAsync(ct);
 
         var rates = await _exchangeRateService.GetRatesAsync(ct);
-        var arrivalRatesByDate = await GetArrivalRatesByDateAsync(plates.Select(p => p.IncomingStock.ArrivalDate), ct);
-        return Ok(plates.Select(p => Map(p, canSeeCost, rates, arrivalRatesByDate[p.IncomingStock.ArrivalDate])).ToList());
+
+        // Geliş kuru partiye kayıtlıdır; TCMB'ye yalnızca kuru henüz doldurulmamış partiler için gidilir.
+        var missingRateDates = plates
+            .Where(p => p.IncomingStock.ArrivalExchangeRate is null && p.IncomingStock.CostCurrency != Currency.TRY)
+            .Select(p => p.IncomingStock.ArrivalDate);
+        var fetchedRatesByDate = await GetArrivalRatesByDateAsync(missingRateDates, ct);
+
+        return Ok(plates.Select(p => Map(
+            p, canSeeCost, rates,
+            ArrivalExchangeRates.FromStored(p.IncomingStock) ?? fetchedRatesByDate.GetValueOrDefault(p.IncomingStock.ArrivalDate)))
+            .ToList());
     }
 
     [HttpGet("{id:int}")]
@@ -77,7 +86,7 @@ public sealed class PlatesController : ControllerBase
         }
 
         var rates = await _exchangeRateService.GetRatesAsync(ct);
-        var arrivalRates = await _exchangeRateService.GetRatesForDateAsync(plate.IncomingStock.ArrivalDate, ct);
+        var arrivalRates = await ArrivalExchangeRates.ResolveAsync(plate.IncomingStock, _exchangeRateService, ct);
         return Ok(Map(plate, canSeeCost, rates, arrivalRates));
     }
 

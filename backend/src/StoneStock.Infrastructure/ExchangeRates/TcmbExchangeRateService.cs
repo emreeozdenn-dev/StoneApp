@@ -39,8 +39,8 @@ public sealed class TcmbExchangeRateService : IExchangeRateService
                 ?? DateTime.Today.ToString("dd.MM.yyyy", CultureInfo.InvariantCulture);
 
             var result = new ExchangeRatesResult(date, ReadRate(doc, "USD"), ReadRate(doc, "EUR"));
-            // TCMB kurları iş günlerinde günde bir kez (~15:30) güncellenir; 1 saatlik önbellek yeterli.
-            _cache.Set(CacheKey, result, TimeSpan.FromHours(1));
+            // TCMB kurları iş günlerinde günde bir kez (~15:30 TSİ) açıklanır; bir sonraki açıklamaya kadar önbellekte tutulur.
+            _cache.Set(CacheKey, result, NextPublicationUtc(DateTimeOffset.UtcNow));
             return result;
         }
         catch (Exception ex)
@@ -62,6 +62,13 @@ public sealed class TcmbExchangeRateService : IExchangeRateService
         if (_cache.TryGetValue(cacheKey, out ExchangeRatesResult? cached) && cached is not null)
         {
             return cached;
+        }
+
+        // Kuru bulunamayan tarih her istekte 11 güne kadar geriye taranmasın diye bir süre "yok" olarak hatırlanır.
+        var missingKey = $"{cacheKey}-missing";
+        if (_cache.TryGetValue(missingKey, out _))
+        {
+            return null;
         }
 
         for (var attempt = 0; attempt <= MaxLookbackDays; attempt++)
@@ -89,7 +96,15 @@ public sealed class TcmbExchangeRateService : IExchangeRateService
         }
 
         _logger.LogWarning("TCMB {Date} tarihli kur bulunamadı ({Lookback} gün geriye gidildi)", date, MaxLookbackDays);
+        _cache.Set(missingKey, true, TimeSpan.FromHours(6));
         return null;
+    }
+
+    /// <summary>Bir sonraki TCMB kur açıklaması: her gün 15:35 TSİ (UTC+3, yaz saati uygulanmaz) = 12:35 UTC.</summary>
+    internal static DateTimeOffset NextPublicationUtc(DateTimeOffset nowUtc)
+    {
+        var todayPublication = new DateTimeOffset(nowUtc.UtcDateTime.Date.AddHours(12).AddMinutes(35), TimeSpan.Zero);
+        return nowUtc < todayPublication ? todayPublication : todayPublication.AddDays(1);
     }
 
     private static decimal? ReadRate(XDocument doc, string code)

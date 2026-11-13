@@ -144,6 +144,9 @@ export interface IncomingStock {
   shippingCost?: number
   otherCost?: number
   totalAdditionalCost?: number
+  /** Geliş tarihindeki kur (1 maliyet para birimi → TRY); partiye kayıtlıdır. */
+  arrivalExchangeRate?: number | null
+  arrivalExchangeRateManual?: boolean
 }
 
 export interface CreateIncomingStockPayload {
@@ -165,6 +168,8 @@ export interface CreateIncomingStockPayload {
   customsCost: number
   shippingCost: number
   otherCost: number
+  /** Elle girilen geliş kuru; boş bırakılırsa TCMB'nin geliş tarihi kuru kaydedilir. */
+  arrivalExchangeRate?: number | null
 }
 
 export async function fetchIncomingStocks(): Promise<IncomingStock[]> {
@@ -195,6 +200,8 @@ export interface UpdateIncomingStockPayload {
   customsCost: number
   shippingCost: number
   otherCost: number
+  /** Elle girilen geliş kuru; boş bırakılırsa TCMB'nin geliş tarihi kuru kaydedilir. */
+  arrivalExchangeRate?: number | null
 }
 
 export async function updateIncomingStock(id: number, payload: UpdateIncomingStockPayload) {

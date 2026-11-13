@@ -48,7 +48,9 @@ public sealed record IncomingStockAdminDto(
     decimal CustomsCost,
     decimal ShippingCost,
     decimal OtherCost,
-    decimal TotalAdditionalCost)
+    decimal TotalAdditionalCost,
+    decimal? ArrivalExchangeRate,
+    bool ArrivalExchangeRateManual)
     : IncomingStockDto(Id, StoneId, StoneName, ArrivalDate, SupplyType, Supplier, BatchCode, BundleCount, BundleLabels,
         Quantity, Thickness, Texture, Warehouse, SaleCurrency, SaleCost, Description, CreatedByUserName, PlateCountAdded,
         TotalArea, CreatedAt);
@@ -70,7 +72,9 @@ public sealed record UpdateIncomingStockRequest(
     string? Description,
     decimal CustomsCost,
     decimal ShippingCost,
-    decimal OtherCost);
+    decimal OtherCost,
+    // Elle girilen geliş kuru; boşsa TCMB'nin geliş tarihi kuru kullanılır.
+    decimal? ArrivalExchangeRate = null);
 
 public sealed record CreateIncomingStockRequest(
     int StoneId,
@@ -90,7 +94,9 @@ public sealed record CreateIncomingStockRequest(
     string? Description,
     decimal CustomsCost,
     decimal ShippingCost,
-    decimal OtherCost);
+    decimal OtherCost,
+    // Elle girilen geliş kuru; boşsa TCMB'nin geliş tarihi kuru kullanılır.
+    decimal? ArrivalExchangeRate = null);
 
 public sealed record IncomingStockImportRowError(int Row, string? StoneCode, string Message);
 

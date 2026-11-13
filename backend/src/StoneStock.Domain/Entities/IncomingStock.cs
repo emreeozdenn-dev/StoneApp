@@ -20,6 +20,13 @@ public sealed class IncomingStock
     public decimal UnitCost { get; set; }
     public Currency CostCurrency { get; set; } = Currency.TRY;
     public Currency SaleCurrency { get; set; } = Currency.TRY;
+
+    /// <summary>
+    /// Geliş tarihindeki kur: 1 birim maliyet para biriminin TRY karşılığı. Parti kaydedilirken bir kez belirlenir
+    /// (elle girilmişse o değer, yoksa TCMB'nin geliş tarihi kuru). TRY maliyette veya kur bulunamadığında null.
+    /// </summary>
+    public decimal? ArrivalExchangeRate { get; set; }
+    public bool ArrivalExchangeRateManual { get; set; }
     public decimal? SaleCost { get; set; }
     public string? Description { get; set; }
     public decimal CustomsCost { get; set; }

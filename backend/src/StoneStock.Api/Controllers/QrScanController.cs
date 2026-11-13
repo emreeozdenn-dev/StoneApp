@@ -70,7 +70,7 @@ public sealed class QrScanController : ControllerBase
         }
 
         var rates = await _exchangeRateService.GetRatesAsync(ct);
-        var arrivalRates = await _exchangeRateService.GetRatesForDateAsync(plate.IncomingStock.ArrivalDate, ct);
+        var arrivalRates = await ArrivalExchangeRates.ResolveAsync(plate.IncomingStock, _exchangeRateService, ct);
 
         var stonePlateCount = await _db.Plates
             .Where(p => p.StoneId == plate.StoneId && p.Status == PlateStatus.Aktif)
