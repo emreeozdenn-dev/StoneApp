@@ -91,3 +91,13 @@ public sealed record CreateIncomingStockRequest(
     decimal CustomsCost,
     decimal ShippingCost,
     decimal OtherCost);
+
+public sealed record IncomingStockImportRowError(int Row, string? StoneCode, string Message);
+
+public sealed record IncomingStockImportResult(
+    bool Saved,
+    int LotCount,
+    int PlateCount,
+    decimal TotalArea,
+    int SkippedRows,
+    List<IncomingStockImportRowError> Errors);

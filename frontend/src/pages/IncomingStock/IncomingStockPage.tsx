@@ -25,6 +25,7 @@ import {
   Typography,
 } from '@mui/material'
 import SearchIcon from '@mui/icons-material/SearchOutlined'
+import UploadFileIcon from '@mui/icons-material/UploadFileOutlined'
 import {
   CURRENCIES,
   SUPPLY_TYPES,
@@ -45,6 +46,7 @@ import { type ColumnDef, useColumnPreferences } from '../../components/common/us
 import { useDraggableColumns } from '../../components/common/useDraggableColumns'
 import { WarehouseField } from '../../components/common/WarehouseField'
 import { resizeBundleLabels } from '../../utils/bundles'
+import { IncomingStockImportDialog } from './IncomingStockImportDialog'
 
 type IncomingStockColumnKey =
   | 'batchCode'
@@ -184,6 +186,8 @@ export function IncomingStockPage() {
   const [editRateOverride, setEditRateOverride] = useState('')
 
   const canCreate = hasPermission(user?.permissions, 'incomingstock.create')
+  const canImport = canCreate && hasPermission(user?.permissions, 'plates.create')
+  const [importOpen, setImportOpen] = useState(false)
   const canEdit = hasPermission(user?.permissions, 'incomingstock.edit')
   const canDelete = hasPermission(user?.permissions, 'incomingstock.delete')
   const canSeeCost =
@@ -514,11 +518,20 @@ export function IncomingStockPage() {
           Gelen Parti/Lot
         </Typography>
         {canCreate && (
-          <Button variant="contained" onClick={() => setDialogOpen(true)}>
-            Gelen Parti/Lot Ekle
-          </Button>
+          <Stack direction="row" spacing={1}>
+            {canImport && (
+              <Button variant="outlined" startIcon={<UploadFileIcon />} onClick={() => setImportOpen(true)}>
+                Excel'den Aktar
+              </Button>
+            )}
+            <Button variant="contained" onClick={() => setDialogOpen(true)}>
+              Gelen Parti/Lot Ekle
+            </Button>
+          </Stack>
         )}
       </Stack>
+
+      <IncomingStockImportDialog open={importOpen} onClose={() => setImportOpen(false)} />
 
       <Stack direction="row" sx={{ flexWrap: 'wrap', gap: 1.75, mb: 3 }}>
         <StatTile label="Toplam Parti/Lot" value={incomingStats.total} />
